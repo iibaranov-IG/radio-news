@@ -1,0 +1,2 @@
+-- First-slice relational schema is applied by radio_news.storage.SQLiteStore.
+-- This file is the migration artifact required by the phase 0.7 contract.
