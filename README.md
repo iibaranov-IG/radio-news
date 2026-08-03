@@ -21,7 +21,9 @@
 
 ### План развития
 
-- [Roadmap](docs/roadmap/kpnews-roadmap.md)
+- [Навигация по roadmap](docs/roadmap/README.md)
+- [Основной Roadmap](docs/roadmap/kpnews-roadmap.md)
+- [Обязательный контракт миграции Horizon 0.5–1.5](docs/roadmap/horizon-migration-0.5-1.5.md)
 
 ## Базовый принцип
 
