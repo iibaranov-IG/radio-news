@@ -21,14 +21,15 @@ This document converts the phase 0.5 audit classifications into formal migration
 4. Existing Horizon behavior is reused only where its contract matches the target requirement and equivalent tests can be written.
 5. Security-sensitive behavior is never simplified during transfer.
 6. SQLite persistence is a new implementation because Horizon provides JSON/Markdown persistence rather than a compatible relational store.
-7. AI, profiles, personas, delivery, MCP, and Web UI remain outside the first vertical slice.
+7. AI, profiles, personas, delivery, MCP, localization/radio rendering, and Web UI remain outside the first vertical slice.
+8. Machine-readable provenance controls implementation authorization through `implementation_authorized` and `authorized_stage` fields.
 
 ## First vertical slice authorized scope
 
 ```text
 fixed RSS fixture
 → Source Registry
-→ RSS ingress
+→ RSS ingress parser without network access
 → RawItem
 → NormalizedItem
 → deterministic Story
@@ -39,7 +40,7 @@ fixed RSS fixture
 → restart/readback acceptance
 ```
 
-The slice must run without importing Horizon and without network access in its acceptance test. A later live RSS test is separate from the deterministic fixture test.
+The slice must run without importing Horizon and without network access in its acceptance test. A later live RSS test is separate from the deterministic fixture test and is not authorized by this decision.
 
 ## Formal component decisions
 
@@ -59,21 +60,21 @@ The slice must run without importing Horizon and without network access in its a
 
 | ID | Component | Decision | Target | Rationale / condition |
 |---|---|---|---|---|
-| RSS-01 | RSS/Atom collector | `TRANSFER_WITH_ADAPTATION` | `src/radio_news/sources/rss.py` | Feed parsing and deterministic source identity may be adapted. Raw bytes/text, canonical URL, timestamps, hash, redirects, and duplicate identity must follow the new contract. |
+| RSS-01 | RSS/Atom collector | `TRANSFER_WITH_ADAPTATION` | `src/radio_news/sources/rss.py` | Feed parsing and deterministic source identity may be adapted for fixed local fixtures. Raw bytes/text, canonical URL, timestamps, hash, and duplicate identity must follow the new contract. Live networking is not authorized. |
 | EXT-01 | Extractor registry | `DEFER` | — | Extraction is not required for the fixed-fixture slice. |
 | EXT-02 | Trafilatura extractor | `DEFER` | — | Add only after raw/normalized ownership and ingress security are accepted. |
-| HTTP-GAP | Non-webhook outbound HTTP paths | `REIMPLEMENT` | `src/radio_news/security/ingress.py` and source adapters | A source-ingress policy must be designed explicitly. The webhook transport is not assumed to cover RSS. |
+| HTTP-GAP | Non-webhook outbound HTTP paths | `REIMPLEMENT` | later `src/radio_news/security/ingress.py` and source adapters | A source-ingress policy must be designed explicitly. The webhook transport is not assumed to cover RSS. Implementation is not authorized in the fixture-only slice. |
 | SSRF-01 | URL validation and pinned webhook transport | `DEFER` | candidate `src/radio_news/security/outbound.py` | The verified transport is preserved as reference but is not copied into the fixture-only slice. Any later transfer requires the full dependency and regression boundary. |
-| SSRF-02 | Security design/audit evidence | `TRANSFER_AS_IS` | `docs/migration/reference/` or provenance links | Preserve evidence and source SHA without altering technical claims. |
+| SSRF-02 | Security design/audit evidence | `TRANSFER_AS_IS` | immutable provenance references; no target code component | Preserve repository, full SHA, source paths, accepted tests, and CI evidence without altering technical claims. |
 
 ### Storage and provenance
 
 | ID | Component | Decision | Target | Rationale / condition |
 |---|---|---|---|---|
-| STORE-01 | File storage/config manager | `TRANSFER_WITH_ADAPTATION` | config loader only; persistence under `src/radio_news/storage/` | Reuse environment expansion, path validation, and atomic-file ideas where needed. Do not reuse JSON/Markdown as the primary domain store. |
+| STORE-01 | File storage/config manager | `TRANSFER_WITH_ADAPTATION` | `src/radio_news/config/loader.py`, `src/radio_news/files/path_safety.py`, `src/radio_news/files/atomic.py` | Reuse selected environment expansion, path validation, and atomic-file behavior where needed. This component does not authorize or represent SQLite persistence. |
 | STORE-02 | MCP staged run store | `REJECT` | — | Its stage model is Horizon-specific and incompatible with target persistence. |
-| FILE-01 | Atomic write/path safety utilities | `TRANSFER_WITH_ADAPTATION` | migration/fixture/export utilities as needed | Preserve tested path-safety behavior; SQLite transactions replace most state writes. |
-| SQLite target | New relational persistence | `REIMPLEMENT` | `src/radio_news/storage/sqlite/`, `migrations/` | New schema, uniqueness constraints, transactions, restart behavior, and migrations are required. |
+| FILE-01 | Atomic write/path safety utilities | `TRANSFER_WITH_ADAPTATION` | `src/radio_news/files/path_safety.py`, `src/radio_news/files/atomic.py` | Preserve tested path-safety behavior where fixture/config files require it. SQLite transactions remain separate. |
+| SQLITE-TARGET | New relational persistence | `REIMPLEMENT` | `src/radio_news/storage/sqlite/`, `migrations/` | New schema, uniqueness constraints, transactions, restart behavior, and migrations are required. All relational persistence tests belong to this component. |
 
 ### Profiles, AI, rendering and localization
 
@@ -89,8 +90,8 @@ The slice must run without importing Horizon and without network access in its a
 | AI-ENRICH | Enrichment/tools | `DEFER` | — | Requires approved Fact and tool-permission boundaries. |
 | AI-REPAIR-2 | Enrichment repair | `DEFER` | — | Same provenance requirement as above. |
 | RENDER-01 | Localized renderer | `DEFER` | — | Radio Writer and Linter are later stages. |
-| I18N-01 | Locale model/loader | `TRANSFER_WITH_ADAPTATION` | later `src/radio_news/localization/` | Preserve strict language validation; no implementation in first slice unless needed for CLI errors. |
-| I18N-02 | Russian built-in rendering rules | `TRANSFER_WITH_ADAPTATION` | later localization/radio-writing modules | Must be replaced or transferred with equivalent tests and human language acceptance. |
+| I18N-01 | Locale model/loader | `TRANSFER_WITH_ADAPTATION` | later `src/radio_news/localization/` | Preserve strict language validation at a later stage; not authorized in the first slice. |
+| I18N-02 | Russian built-in rendering rules | `TRANSFER_WITH_ADAPTATION` | later localization/radio-writing modules | Not authorized in the first slice. Later activation requires equivalent tests and human language acceptance. |
 | I18N-03 | External Russian locale file | `DEFER` | — | Production activation is unknown; schema decision is pending. |
 | I18N-CLI | Locale validation CLI | `DEFER` | — | Add after target locale contract exists. |
 
@@ -116,13 +117,31 @@ The slice must run without importing Horizon and without network access in its a
 | CI-01 | Public release audit workflow | `TRANSFER_WITH_ADAPTATION` | `.github/workflows/ci.yml` | Reuse clean build/install, tests, `pip check`, and hygiene concepts; create radio-news-specific jobs. |
 | CI-02 | Disabled daily workflow | `REJECT` | — | Not operational evidence. |
 | TEST-01 | Core/source/processing tests | `TRANSFER_WITH_ADAPTATION` | `tests/` | Select behavior-level RSS/config/path tests; do not copy tests whose domain contract is obsolete. |
-| TEST-SEC | Security regression suite | `DEFER` for first fixture slice; mandatory with any network/security transfer | later `tests/security/` | No SSRF claim may be made without the complete transport-boundary suite. |
+| TEST-SEC | Security regression suite | `DEFER` | later `tests/security/` | Not part of the fixture-only slice. It becomes mandatory with any network/security transfer; no SSRF claim may be made without the complete transport-boundary suite. |
 | DOC-01 | Runtime/config/profile/scraper docs | `TRANSFER_WITH_ADAPTATION` | `docs/migration/reference/` and target docs | Preserve provenance; rewrite product instructions for radio-news. |
 | DOC-02 | Governance/security policy | `TRANSFER_WITH_ADAPTATION` | repository root/docs | Review ownership and reporting contacts before adoption. |
 
-## Components blocked rather than decided
+## Machine-readable authorization model
 
-No component remains implicitly `NEEDS_REVIEW` for the authorized first slice. The following decisions are deliberately blocked from implementation despite having a formal `DEFER` decision:
+`provenance/horizon-components.json` uses schema version `2` and records for every migration-relevant component:
+
+```text
+implementation_authorized: true | false
+authorized_stage: <explicit stage identifier>
+```
+
+Rules:
+
+- `implementation_authorized: true` permits work only inside the named `authorized_stage` after this PR is merged.
+- `implementation_authorized: false` blocks implementation even when a formal migration decision already exists.
+- `TRANSFER_AS_IS` for evidence components does not imply creation of target runtime code.
+- A later PR must update the manifest before any deferred component becomes implementable.
+
+For the first vertical slice, `SSRF-01`, `SSRF-02`, `HTTP-GAP`, `TEST-SEC`, and `I18N-02` have `implementation_authorized: false`.
+
+## Components blocked rather than implemented
+
+No component remains implicitly `NEEDS_REVIEW` for the authorized first slice. The following decisions are deliberately blocked from implementation despite having a formal decision:
 
 - SSRF transport: blocked until the target outbound-call inventory, HTTPX/httpcore versions, and equivalence suite are approved.
 - Live RSS ingress: blocked until source trust, DNS/redirect policy, response limits, and raw-payload policy are specified.
@@ -194,27 +213,40 @@ The implementation must provide migrations, foreign keys, uniqueness constraints
 9. Process restart followed by readback returns the same domain graph.
 10. Installed wheel runs from a directory outside the checkout.
 11. No import or runtime access to Horizon occurs.
-12. CI records exact target SHA and executes tests, clean install, `pip check`, migration checks, and repository hygiene.
+12. CI records exact target SHA and executes tests, clean install, `pip check`, migration checks, provenance-schema validation, and repository hygiene.
+13. Manifest validation confirms that implementation touches only components with `implementation_authorized: true` for the active stage.
 
 ## Provenance requirements
 
-Machine-readable provenance is maintained in `provenance/horizon-components.json`. Each selected/adapted component must record:
+Machine-readable provenance is maintained in `provenance/horizon-components.json`. Each selected, adapted, reimplemented, deferred, or evidence-only component relevant to the first-slice boundary must record:
 
 - Horizon source repository and pinned SHA;
 - exact source paths;
-- target paths;
+- target paths, or an empty list for reference-only evidence;
 - migration decision;
+- implementation authorization and stage;
 - local changes or explicit `not_started` state;
 - required tests;
 - CI run after implementation.
 
+The first-slice manifest explicitly includes foundation/runtime components (`PKG-01`, `CLI-01`, `ORCH-01`, `SCRAPE-BASE`), support components (`STORE-01`, `FILE-01`), test components (`TEST-01`, `TEST-SEC`), and security evidence (`SSRF-02`).
+
 ## Authorization boundary
 
-After this decision is merged, phase 1.0 may create the modular-monolith skeleton and implement only the authorized first-slice components.
+After this decision is merged, phase 1.0 may create the modular-monolith skeleton and implement only components whose manifest entry has:
+
+```text
+implementation_authorized: true
+```
+
+and whose `authorized_stage` matches the active implementation stage.
 
 The following remain unauthorized until separate decisions or roadmap gates:
 
 ```text
+live RSS networking and source-ingress security
+SSRF transport and outbound delivery security
+Russian localization and radio rendering
 AI and processing profiles
 personas and Chief News Editor
 Radio Writer and Linter
@@ -233,6 +265,6 @@ Horizon retirement
 CONTROLLED EXTRACTION STRATEGY: APPROVED FOR FIRST VERTICAL SLICE ONLY
 PERMANENT HORIZON RUNTIME DEPENDENCY: REJECTED
 FULL REPOSITORY SUBTREE: REJECTED
-FIRST SLICE IMPLEMENTATION: AUTHORIZED AFTER MERGE
+FIRST SLICE IMPLEMENTATION: AUTHORIZED AFTER MERGE FOR MANIFEST-AUTHORIZED COMPONENTS ONLY
 HORIZON RETIREMENT: BLOCKED
 ```
