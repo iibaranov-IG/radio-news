@@ -1,0 +1,32 @@
+name: CI
+on:
+  push:
+    branches: [main, feature/first-independent-vertical-slice]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: echo "GITHUB_SHA=$GITHUB_SHA"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest
+      - run: python -m build
+      - name: clean wheel install outside checkout
+        run: |
+          python -m venv /tmp/radio-news-venv
+          /tmp/radio-news-venv/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/radio-news-venv/bin/python -c 'import radio_news; print(radio_news.__version__)'
+          /tmp/radio-news-venv/bin/radio-news --help
+          /tmp/radio-news-venv/bin/pip check
+      - name: prove no Horizon dependency
+        run: |
+          ! grep -R "import horizon\|from horizon\|import src\|from src" src/radio_news
