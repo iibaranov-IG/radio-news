@@ -1,32 +1,173 @@
 name: CI
+
 on:
   push:
     branches: [main, feature/first-independent-vertical-slice]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - run: echo "GITHUB_SHA=$GITHUB_SHA"
+          python-version: "3.11"
+
+      - name: Record CI provenance
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          PYTHON_VERSION="$(python --version 2>&1)"
+          {
+            echo "EVENT_NAME=${GITHUB_EVENT_NAME}"
+            echo "PR_HEAD_SHA=${PR_HEAD_SHA}"
+            echo "CHECKED_OUT_SHA=${CHECKED_OUT_SHA}"
+            echo "BASE_SHA=${BASE_SHA}"
+            echo "PYTHON_VERSION=${PYTHON_VERSION}"
+          } | tee ci-provenance.txt
+          {
+            echo "## CI provenance"
+            echo '```text'
+            cat ci-provenance.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]'
-      - run: python -m pytest
-      - run: python -m build
-      - name: clean wheel install outside checkout
+
+      - name: Run contract tests
+        run: |
+          python -m pytest -q | tee pytest-result.txt
+          echo "TEST_RESULT=$(tail -n 1 pytest-result.txt)" >> ci-provenance.txt
+
+      - name: Build wheel and sdist
+        run: python -m build
+
+      - name: Clean installed-wheel acceptance outside checkout
         run: |
           python -m venv /tmp/radio-news-venv
-          /tmp/radio-news-venv/bin/pip install dist/*.whl
-          cd /tmp
+          /tmp/radio-news-venv/bin/python -m pip install --upgrade pip
+          /tmp/radio-news-venv/bin/python -m pip install dist/*.whl
+          /tmp/radio-news-venv/bin/python -m pip check
+          mkdir -p /tmp/radio-news-acceptance
+          cat > /tmp/radio-news-acceptance/config.json <<'JSON'
+          {
+            "source": {
+              "source_id": "fixture-kp",
+              "display_name": "Fixture KP",
+              "source_type": "rss_fixture",
+              "enabled": true,
+              "trust_class": "TEST",
+              "fixture_resource": "sample.xml"
+            }
+          }
+          JSON
+          cd /tmp/radio-news-acceptance
           /tmp/radio-news-venv/bin/python -c 'import radio_news; print(radio_news.__version__)'
+          /tmp/radio-news-venv/bin/python - <<'PY'
+          from importlib.resources import files
+          assert files("radio_news.fixtures").joinpath("sample.xml").is_file()
+          migration = files("radio_news.storage.migrations").joinpath("0001_initial.sql")
+          assert migration.is_file()
+          assert "CREATE TABLE sources" in migration.read_text(encoding="utf-8")
+          PY
           /tmp/radio-news-venv/bin/radio-news --help
-          /tmp/radio-news-venv/bin/pip check
-      - name: prove no Horizon dependency
+          /tmp/radio-news-venv/bin/radio-news run-fixture \
+            --config config.json \
+            --database radio-news.sqlite \
+            --editor ci-editor \
+            --now 2026-08-03T10:00:00Z | tee first-run.json
+          /tmp/radio-news-venv/bin/radio-news run-fixture \
+            --config config.json \
+            --database radio-news.sqlite \
+            --editor ci-editor \
+            --now 2026-08-03T11:00:00Z | tee second-run.json
+          /tmp/radio-news-venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          first = json.loads(Path("first-run.json").read_text())
+          second = json.loads(Path("second-run.json").read_text())
+          expected = {
+              "sources": 1,
+              "raw_items": 1,
+              "normalized_items": 1,
+              "stories": 1,
+              "claims": 1,
+              "facts": 1,
+              "verification_results": 1,
+          }
+          for key, value in expected.items():
+              assert first[key] == value
+              assert second[key] == value
+          assert first["item_statuses"] == ["created"]
+          assert second["item_statuses"] == ["existing"]
+          assert first["raw_item_ids"] == second["raw_item_ids"]
+          assert first["verification_status"] == "READY"
+          assert second["verification_status"] == "READY"
+          Path("raw-id.txt").write_text(first["raw_item_ids"][0])
+          PY
+          RAW_ID="$(cat raw-id.txt)"
+          /tmp/radio-news-venv/bin/radio-news read-graph \
+            --database radio-news.sqlite \
+            --raw-item-id "$RAW_ID" | tee readback.json
+          /tmp/radio-news-venv/bin/radio-news migration-status \
+            --database radio-news.sqlite | tee migration-status.json
+          /tmp/radio-news-venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          graph = json.loads(Path("readback.json").read_text())
+          migrations = json.loads(Path("migration-status.json").read_text())
+          assert graph["source"]["configuration_fingerprint"]
+          assert graph["raw"]["content_hash"]
+          assert graph["fact"]["supporting_claim_ids"] == [graph["claim"]["id"]]
+          assert graph["verification"]["status"] == "READY"
+          assert graph["verification"]["policy_version"] == "manual-fact-v1"
+          assert migrations["migration_versions"] == [1]
+          PY
+          echo "INSTALLED_PACKAGE_VERSION=$(/tmp/radio-news-venv/bin/python -c 'import radio_news; print(radio_news.__version__)')" >> "$GITHUB_WORKSPACE/ci-provenance.txt"
+          echo "MIGRATION_VERSIONS=$(cat migration-status.json)" >> "$GITHUB_WORKSPACE/ci-provenance.txt"
+
+      - name: Prove no Horizon runtime dependency
         run: |
-          ! grep -R "import horizon\|from horizon\|import src\|from src" src/radio_news
+          if git grep -nE '(^|[[:space:]])(from|import)[[:space:]]+(horizon|src)([[:space:].]|$)' -- src tests; then
+            echo "Forbidden Horizon/src import found" >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import tomllib
+          with open("pyproject.toml", "rb") as handle:
+              project = tomllib.load(handle)["project"]
+          dependencies = project.get("dependencies", [])
+          assert not any("horizon" in dependency.lower() for dependency in dependencies)
+          PY
+
+      - name: Publish provenance summary
+        if: always()
+        run: |
+          {
+            echo "## Acceptance evidence"
+            echo '```text'
+            cat ci-provenance.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: first-slice-ci-${{ github.run_id }}
+          path: |
+            ci-provenance.txt
+            pytest-result.txt
+            /tmp/radio-news-acceptance/first-run.json
+            /tmp/radio-news-acceptance/second-run.json
+            /tmp/radio-news-acceptance/readback.json
+            /tmp/radio-news-acceptance/migration-status.json
