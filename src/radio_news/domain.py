@@ -5,6 +5,17 @@ from datetime import datetime
 
 
 @dataclass(frozen=True, slots=True)
+class SourceRecord:
+    source_id: str
+    source_type: str
+    display_name: str
+    enabled: bool
+    trust_class: str
+    configuration_fingerprint: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class RawItem:
     id: str
     source_id: str
@@ -52,6 +63,15 @@ class Fact:
     editor_id: str
     decided_at: datetime
     editorial_status: str
+    supporting_claim_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class VerificationDecision:
+    status: str
+    reason_codes: tuple[str, ...]
+    reason: str
+    policy_version: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +79,18 @@ class VerificationResult:
     id: str
     fact_id: str
     status: str
+    reason_codes: tuple[str, ...]
     reason: str
     policy_version: str
     evaluated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class DomainGraph:
+    source: SourceRecord
+    raw: RawItem
+    normalized: NormalizedItem
+    story: Story
+    claim: Claim
+    fact: Fact
+    verification: VerificationResult
