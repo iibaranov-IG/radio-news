@@ -95,27 +95,37 @@ Security boundary нельзя переписывать или упрощать 
 
 ## Машинно-проверяемый provenance
 
-`provenance/horizon-components.json` хранит происхождение каждого перенесённого компонента.
+`provenance/horizon-components.json` хранит происхождение всех перенесённых компонентов в одном manifest.
 
 ```json
 {
-  "component": "ssrf_transport",
+  "schema_version": 1,
   "source_repository": "iibaranov-IG/Horizon",
-  "source_commit": "<full-sha>",
-  "source_paths": ["src/horizon/transport/..."],
-  "target_paths": ["src/radio_news/security/..."],
-  "usage_status": "ACTIVE_RUNTIME",
-  "migration_status": "TRANSFER_AS_IS",
-  "migration_risk": "CRITICAL",
-  "local_changes": [],
-  "verification": {
-    "tests": [],
-    "ci_run": null
-  }
+  "baseline_commit": "<full-sha>",
+  "generated_at": "<ISO-8601>",
+  "components": [
+    {
+      "component_id": "ssrf_transport",
+      "source_paths": [
+        "src/horizon/transport/..."
+      ],
+      "target_paths": [
+        "src/radio_news/security/..."
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "TRANSFER_AS_IS",
+      "migration_risk": "CRITICAL",
+      "local_changes": [],
+      "verification": {
+        "tests": [],
+        "ci_run": null
+      }
+    }
+  ]
 }
 ```
 
-CI должен валидировать схему provenance и обязательные поля.
+CI должен валидировать корневую схему provenance, перечисления и обязательные поля каждого компонента.
 
 # 0.5 Horizon Migration Audit
 
@@ -356,7 +366,7 @@ Horizon может быть архивирован только после вы�
 [ ] baseline зафиксирован на точном SHA
 [ ] provenance записан и проверяется CI
 [ ] SSRF transport перенесён без деградации
-[ ] русская локализация перенесена или сознательно отложена с заменой
+[ ] русская локализация перенесена либо заменена функционально эквивалентной реализацией, подтверждённой тестами
 [ ] processing profiles работают
 [ ] structured-output repair перенесён
 [ ] config contracts определены
