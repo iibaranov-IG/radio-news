@@ -304,6 +304,7 @@ CRITICAL
 
 HIGH
 - package namespace/build contract
+- RSS collector implementation details
 - orchestrator
 - ContentItem/domain mapping
 - config schema
@@ -315,7 +316,6 @@ HIGH
 - live delivery/provider integrations
 
 MEDIUM
-- RSS collector implementation details
 - individual non-core collectors
 - extractors
 - file utilities
