@@ -1,2 +1,28 @@
-# radio-news
-Russian-language adaptive radio newsroom: source collection, editorial agents, approvals, and audience-aware scheduling.
+# radio-news / КПNEWS
+
+Редакционная система подготовки радиовыпусков новостей на базе Horizon.
+
+## Статус
+
+Проект находится на стадии архитектуры и планирования MVP. Автоматическая публикация в эфир не предусмотрена: итоговый выпуск утверждает человек-редактор.
+
+## Документы
+
+### Архитектура
+
+- [Общая архитектура КПNEWS](docs/architecture/kpnews-overview.md)
+- [Chief News Editor](docs/architecture/chief-news-editor.md)
+
+### Редакционные правила
+
+- [Ведущие и редакционные персоны](docs/editorial/hosts.md)
+- [Утверждённые источники](docs/editorial/sources.md)
+- [Правила вёрстки выпусков](docs/editorial/release-layout-rules.md)
+
+### План развития
+
+- [Roadmap](docs/roadmap/kpnews-roadmap.md)
+
+## Базовый принцип
+
+> Horizon собирает и понимает информационный поток. КПNEWS превращает его в проверенную редакционную картину дня. Персоны дают профессиональные сигналы. Главный новостник формирует Editorial Slate. Rundown Engine собирает технически допустимый выпуск. Человек-редактор утверждает результат.
