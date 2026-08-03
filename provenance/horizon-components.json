@@ -1,7 +1,282 @@
 {
   "schema_version": 1,
   "source_repository": "iibaranov-IG/Horizon",
-  "baseline_commit": null,
-  "generated_at": null,
-  "components": []
+  "baseline_commit": "fd28db14c506ce23bdc0727ed2da4ff318aced32",
+  "generated_at": "2026-08-03T00:00:00Z",
+  "components": [
+    {
+      "component_id": "CONFIG-01",
+      "source_paths": [
+        "src/models.py",
+        "src/storage/manager.py"
+      ],
+      "target_paths": [
+        "src/radio_news/config/"
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "TRANSFER_WITH_ADAPTATION",
+      "migration_risk": "HIGH",
+      "local_changes": [
+        "not_started",
+        "target schema restricted to first-slice RSS configuration",
+        "retain strict validation and fail-closed unknown fields"
+      ],
+      "verification": {
+        "tests": [
+          "target config validation",
+          "unknown-field rejection",
+          "fixture source loading"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "REG-01",
+      "source_paths": [
+        "src/models.py"
+      ],
+      "target_paths": [
+        "src/radio_news/sources/registry.py"
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "TRANSFER_WITH_ADAPTATION",
+      "migration_risk": "MEDIUM",
+      "local_changes": [
+        "not_started",
+        "first slice supports RSS only",
+        "add trust class and configuration fingerprint"
+      ],
+      "verification": {
+        "tests": [
+          "stable source identity",
+          "duplicate source rejection",
+          "configuration fingerprint stability"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "RSS-01",
+      "source_paths": [
+        "src/scrapers/rss.py",
+        "tests/test_rss.py"
+      ],
+      "target_paths": [
+        "src/radio_news/sources/rss.py",
+        "tests/sources/test_rss.py"
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "TRANSFER_WITH_ADAPTATION",
+      "migration_risk": "HIGH",
+      "local_changes": [
+        "not_started",
+        "preserve raw payload and provenance",
+        "replace Horizon ContentItem output with RawItem and NormalizedItem",
+        "define canonical URL and duplicate identity",
+        "fixture acceptance runs without network access"
+      ],
+      "verification": {
+        "tests": [
+          "fixed RSS fixture ingestion",
+          "raw payload preservation",
+          "published and fetched timestamps",
+          "deterministic content hash",
+          "second run creates no duplicates"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "MODEL-01",
+      "source_paths": [
+        "src/models.py"
+      ],
+      "target_paths": [
+        "src/radio_news/domain/raw_item.py",
+        "src/radio_news/domain/normalized_item.py",
+        "src/radio_news/domain/story.py",
+        "src/radio_news/domain/claim.py",
+        "src/radio_news/domain/fact.py",
+        "src/radio_news/domain/verification.py"
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "REIMPLEMENT",
+      "migration_risk": "HIGH",
+      "local_changes": [
+        "not_started",
+        "replace combined ContentItem aggregate with explicit domain entities",
+        "all derived entities retain links to raw provenance"
+      ],
+      "verification": {
+        "tests": [
+          "domain relationship tests",
+          "raw record immutability",
+          "story identity determinism",
+          "claim-to-raw linkage",
+          "manual fact audit fields"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "STORE-01",
+      "source_paths": [
+        "src/storage/manager.py",
+        "src/_file_utils.py"
+      ],
+      "target_paths": [
+        "src/radio_news/storage/sqlite/",
+        "migrations/"
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "TRANSFER_WITH_ADAPTATION",
+      "migration_risk": "HIGH",
+      "local_changes": [
+        "not_started",
+        "retain selected config and path-safety behavior",
+        "replace JSON/Markdown domain persistence with SQLite"
+      ],
+      "verification": {
+        "tests": [
+          "migration apply from empty database",
+          "foreign key enforcement",
+          "uniqueness constraints",
+          "transaction rollback",
+          "restart and readback"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "SQLITE-TARGET",
+      "source_paths": [],
+      "target_paths": [
+        "src/radio_news/storage/sqlite/",
+        "migrations/"
+      ],
+      "usage_status": "UNKNOWN",
+      "migration_decision": "REIMPLEMENT",
+      "migration_risk": "HIGH",
+      "local_changes": [
+        "not_started",
+        "new target requirement; no equivalent Horizon implementation found"
+      ],
+      "verification": {
+        "tests": [
+          "idempotent fixture pipeline",
+          "restart persistence",
+          "schema migration checks"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "HTTP-GAP",
+      "source_paths": [
+        "src/scrapers/rss.py",
+        "src/url_security.py",
+        "src/services/webhook.py"
+      ],
+      "target_paths": [
+        "src/radio_news/security/ingress.py"
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "REIMPLEMENT",
+      "migration_risk": "CRITICAL",
+      "local_changes": [
+        "not_started",
+        "define source-ingress trust and redirect policy separately from webhook delivery",
+        "no universal SSRF claim",
+        "live network ingress blocked until threat model is approved"
+      ],
+      "verification": {
+        "tests": [
+          "URL scheme and credential rejection",
+          "DNS and redirect policy tests before live ingress",
+          "response-size and timeout tests",
+          "no fallback around approved transport policy"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "SSRF-01",
+      "source_paths": [
+        "src/url_security.py",
+        "src/services/webhook.py",
+        "tests/test_url_security.py",
+        "tests/test_webhook.py",
+        "docs/security/pre_send_ssrf_design.md"
+      ],
+      "target_paths": [
+        "src/radio_news/security/outbound.py",
+        "tests/security/"
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "DEFER",
+      "migration_risk": "CRITICAL",
+      "local_changes": [
+        "not_started",
+        "deferred from fixture-only vertical slice",
+        "future transfer must preserve Host, SNI, certificate verification, per-hop repinning, peer checks and fail-closed behavior",
+        "httpcore dependency boundary must be reviewed"
+      ],
+      "verification": {
+        "tests": [
+          "complete Horizon transport-boundary equivalence suite required before activation"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "CI-01",
+      "source_paths": [
+        ".github/workflows/public-release-audit.yml"
+      ],
+      "target_paths": [
+        ".github/workflows/ci.yml"
+      ],
+      "usage_status": "ACTIVE_DEV_ONLY",
+      "migration_decision": "TRANSFER_WITH_ADAPTATION",
+      "migration_risk": "HIGH",
+      "local_changes": [
+        "not_started",
+        "target CI must record exact SHA",
+        "include tests, clean wheel install outside checkout, pip check, migration checks and hygiene"
+      ],
+      "verification": {
+        "tests": [
+          "workflow succeeds on exact radio-news head SHA"
+        ],
+        "ci_run": null
+      }
+    },
+    {
+      "component_id": "I18N-02",
+      "source_paths": [
+        "src/ai/summarizer.py",
+        "src/services/webhook.py",
+        "profiles/tech-news/profile.json",
+        "profiles/tech-blog/profile.json"
+      ],
+      "target_paths": [
+        "src/radio_news/localization/"
+      ],
+      "usage_status": "ACTIVE_RUNTIME",
+      "migration_decision": "TRANSFER_WITH_ADAPTATION",
+      "migration_risk": "HIGH",
+      "local_changes": [
+        "not_started",
+        "not authorized for first slice unless required for deterministic CLI messages",
+        "later activation requires tests and human Russian-language acceptance"
+      ],
+      "verification": {
+        "tests": [
+          "locale contract tests",
+          "human acceptance fixture"
+        ],
+        "ci_run": null
+      }
+    }
+  ]
 }
