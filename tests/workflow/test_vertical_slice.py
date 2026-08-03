@@ -48,6 +48,31 @@ def test_same_external_id_changed_payload_fails(app_config, now, tmp_path: Path)
         )
 
 
+def test_conflict_rolls_back_entire_pipeline(app_config, now, tmp_path: Path) -> None:
+    database = tmp_path / "news.db"
+    initial = run_fixture_pipeline(
+        app_config, database_path=database, editor_id="editor-1", now=now
+    )
+    store = SQLiteStore(database)
+    before = store.counts()
+    changed = load_fixture_bytes("sample.xml").replace(
+        "Новые правила вступят".encode("utf-8"),
+        "Конфликтующие правила вступят".encode("utf-8"),
+    )
+    with pytest.raises(IdentityConflict):
+        run_fixture_pipeline(
+            app_config,
+            database_path=database,
+            editor_id="editor-1",
+            now=now + timedelta(hours=1),
+            payload_override=changed,
+        )
+    assert store.counts() == before
+    assert store.read_graph(initial.items[0].raw_item_id).raw.raw_content.startswith(
+        "Новые правила"
+    )
+
+
 def test_no_partial_graph_after_identity_conflict(app_config, now, tmp_path: Path) -> None:
     database = tmp_path / "news.db"
     first = run_fixture_pipeline(
@@ -123,6 +148,25 @@ def test_source_record_is_persisted_and_raw_references_it(app_config, now, tmp_p
     assert len(graph.source.configuration_fingerprint) == 64
 
 
+def test_source_record_is_persisted(app_config, now, tmp_path: Path) -> None:
+    database = tmp_path / "news.db"
+    result = run_fixture_pipeline(
+        app_config, database_path=database, editor_id="editor-1", now=now
+    )
+    graph = SQLiteStore(database).read_graph(result.items[0].raw_item_id)
+    assert graph.source.source_id == "fixture-kp"
+    assert graph.source.configuration_fingerprint
+
+
+def test_raw_item_references_persisted_source(app_config, now, tmp_path: Path) -> None:
+    database = tmp_path / "news.db"
+    result = run_fixture_pipeline(
+        app_config, database_path=database, editor_id="editor-1", now=now
+    )
+    graph = SQLiteStore(database).read_graph(result.items[0].raw_item_id)
+    assert graph.raw.source_id == graph.source.source_id
+
+
 def test_duplicate_source_conflicting_config_fails(config_dict, now, tmp_path: Path) -> None:
     from radio_news.config import AppConfig
 
@@ -166,3 +210,12 @@ def test_verifier_same_after_restart(app_config, now, tmp_path: Path) -> None:
     assert decision.reason_codes == graph.verification.reason_codes
     assert decision.reason == graph.verification.reason
     assert decision.policy_version == graph.verification.policy_version
+
+
+def test_policy_version_is_persisted(app_config, now, tmp_path: Path) -> None:
+    database = tmp_path / "news.db"
+    result = run_fixture_pipeline(
+        app_config, database_path=database, editor_id="editor-1", now=now
+    )
+    graph = SQLiteStore(database).read_graph(result.items[0].raw_item_id)
+    assert graph.verification.policy_version == VerificationPolicy.version
