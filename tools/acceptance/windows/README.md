@@ -2,35 +2,44 @@
 
 This directory contains the controlled Windows acceptance harness for PR #9, **P2 — Story and Evidence View**.
 
-The harness validates the authorized P2 product chain:
+The harness validates only the authorized P2 chain:
 
 ```text
 Feed card
-→ Story
-→ RawItem / NormalizedItem
-→ Claim
-→ Fact
-→ Source
-→ VerificationResult
-→ provenance
+-> Story
+-> RawItem / NormalizedItem
+-> Claim
+-> Fact
+-> Source
+-> VerificationResult
+-> provenance
 ```
 
-It does not authorize or test P3–P5.
+It does not authorize or test P3-P5.
+
+## Source of the wheel
+
+The normal acceptance path does **not** download or copy a wheel manually.
+
+The harness uses Git as the source of truth:
+
+1. verifies that product head `1aafddaaae2747585847642b2c2ba46253fa20b4` is an ancestor of the checked-out harness head;
+2. verifies that all later changes are confined to this acceptance directory;
+3. creates a detached Git worktree at the exact product head;
+4. builds one wheel from that clean worktree with Python 3.11;
+5. computes and records the resulting wheel SHA-256;
+6. removes the temporary worktree;
+7. installs that wheel and runs Windows acceptance.
+
+An externally supplied `-Wheel` remains supported only for checking the published CI artifact. It is not required for the normal Git-driven run.
 
 ## Preconditions
 
-- Windows target with Python 3.11 available through `py -3.11`;
+- Windows with Python 3.11 available through `py -3.11`;
 - local checkout of branch `feature/p2-story-evidence-view`;
 - clean Git working tree;
 - the existing 20-item offline SQLite database;
-- the exact P2 wheel built from product head `1aafddaaae2747585847642b2c2ba46253fa20b4`;
-- expected wheel SHA-256:
-
-```text
-7d2da463519e0640a8cfbd718f6779f4b82eecdf6b4e7e0b69b1e41dc6e58e9e
-```
-
-The acceptance harness itself may be committed after that product head. It verifies that every later change is confined to this directory.
+- network access for Python build isolation if build requirements are not already cached.
 
 ## Update the local PR checkout
 
@@ -44,32 +53,51 @@ git rev-parse HEAD
 
 `git status --short` must produce no output.
 
-## Run acceptance
+## Optional parser check
+
+```powershell
+$scriptPath = (Resolve-Path ".\tools\acceptance\windows\run_p2_acceptance.ps1").Path
+$tokens = $null
+$parseErrors = $null
+[System.Management.Automation.Language.Parser]::ParseFile(
+    $scriptPath,
+    [ref]$tokens,
+    [ref]$parseErrors
+) | Out-Null
+$parseErrors
+```
+
+Empty output means the PowerShell parser gate passed.
+
+## Run acceptance from Git
 
 ```powershell
 cd D:\kpnews\radio-news-src
 Set-ExecutionPolicy -Scope Process Bypass -Force
+
 .\tools\acceptance\windows\run_p2_acceptance.ps1 `
-  -Wheel "D:\kpnews\acceptance\radio_news-0.1.0-p2-1aafddaa-py3-none-any.whl" `
   -Database "D:\kpnews\work\radio-news.sqlite" `
   -WorkDir "D:\kpnews\p2-acceptance" `
+  -BuildDir "D:\kpnews\p2-build" `
   -Port 8877
 ```
 
-The wheel filename is not significant; its SHA-256 must match the expected value.
+No `-Wheel` argument is used. The wheel is built from the exact Git product head.
 
 ## Automated checks
 
 The script verifies:
 
-- the exact product head is an ancestor of the checked-out harness commit;
-- no product file changed after the exact product head;
-- the repository working tree is clean;
+- exact product-head ancestry;
+- clean current checkout;
+- no product changes after the exact product head;
+- clean detached product worktree;
+- wheel built from the exact Git commit;
 - wheel SHA-256;
-- Python package installation and `pip check`;
+- package installation and `pip check`;
 - localhost-only launch;
 - P1 feed regression, including 20 cards and source attribution;
-- the complete P2 Story HTML and JSON graph;
+- complete P2 Story HTML and JSON graph;
 - required provenance relations;
 - byte-identical SQLite SHA-256 before and after HTTP serving.
 
@@ -93,14 +121,17 @@ Evidence is written to:
 D:\kpnews\p2-acceptance\evidence\
 ```
 
-Key file:
+Key files:
 
 ```text
+p2-wheel-build-evidence.json
 p2-acceptance-evidence.json
 ```
 
-It records the product head, harness head, wheel hash, database hashes, graph counts, P1 regression status, P2 technical result, and editorial verdict.
+The build evidence records the exact product head, harness head, clean detached worktree, generated wheel path, Python version, and wheel SHA-256.
+
+The acceptance evidence records the wheel origin, database hashes, graph counts, P1 regression status, P2 technical result, and editorial verdict.
 
 ## Scope boundary
 
-The harness performs no domain writes, no migrations, no live RSS, and no outbound HTTP. PR #9 remains Draft until the Windows-visible editorial verdict is `PASS`.
+The harness performs no domain writes, no migrations, no live RSS, and no outbound product HTTP. PR #9 remains Draft until the Windows-visible editorial verdict is `PASS`.
