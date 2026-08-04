@@ -5,7 +5,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-MANIFEST = ROOT / "provenance" / "horizon-components.json"
+HORIZON_MANIFEST = ROOT / "provenance" / "horizon-components.json"
+PRODUCT_MANIFEST = ROOT / "provenance" / "product-stages.json"
 IMPLEMENTED = {
     "PKG-01",
     "CLI-01",
@@ -44,18 +45,44 @@ def _matches(path: str, target: str) -> bool:
     return path == normalized or path.startswith(normalized + "/")
 
 
-def test_implementation_paths_are_authorized_for_first_slice() -> None:
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+def _horizon_authorized_targets() -> tuple[dict[str, dict[str, object]], list[str]]:
+    manifest = json.loads(HORIZON_MANIFEST.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 2
     entries = {entry["component_id"]: entry for entry in manifest["components"]}
     assert IMPLEMENTED <= entries.keys()
-    authorized_targets: list[str] = []
+    targets: list[str] = []
     for component_id in IMPLEMENTED:
         entry = entries[component_id]
         assert entry["implementation_authorized"] is True
         assert entry["authorized_stage"].startswith("FIRST_VERTICAL_SLICE")
         assert "not_started" not in entry["local_changes"]
-        authorized_targets.extend(entry["target_paths"])
+        targets.extend(entry["target_paths"])
+    return entries, targets
+
+
+def _p1_authorized_targets() -> list[str]:
+    manifest = json.loads(PRODUCT_MANIFEST.read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 1
+    assert manifest["active_stage"] == "PRODUCT_SLICE_P1"
+    stages = {entry["stage_id"]: entry for entry in manifest["stages"]}
+
+    p1 = stages["PRODUCT_SLICE_P1"]
+    assert p1["authorized_stage"] == "PRODUCT_SLICE_P1"
+    assert p1["implementation_authorized"] is True
+    assert set(p1["authorized_existing_components"]) <= IMPLEMENTED
+
+    for stage_id in ("PRODUCT_SLICE_P2", "PRODUCT_SLICE_P3", "PRODUCT_SLICE_P4", "PRODUCT_SLICE_P5"):
+        stage = stages[stage_id]
+        assert stage["authorized_stage"] == stage_id
+        assert stage["implementation_authorized"] is False
+
+    return list(p1["authorized_paths"])
+
+
+def test_implementation_paths_are_covered_by_active_authorities() -> None:
+    _, horizon_targets = _horizon_authorized_targets()
+    product_targets = _p1_authorized_targets()
+    authorized_targets = horizon_targets + product_targets
     uncovered = sorted(
         path
         for path in IMPLEMENTATION_PATHS
@@ -65,7 +92,6 @@ def test_implementation_paths_are_authorized_for_first_slice() -> None:
 
 
 def test_blocked_components_remain_unauthorized() -> None:
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    entries = {entry["component_id"]: entry for entry in manifest["components"]}
+    entries, _ = _horizon_authorized_targets()
     for component_id in BLOCKED:
         assert entries[component_id]["implementation_authorized"] is False

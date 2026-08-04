@@ -11,6 +11,7 @@ from typing import Any
 from .config import load_config
 from .errors import RadioNewsError
 from .storage import SQLiteStore
+from .web import serve_editorial_feed
 from .workflow import run_fixture_pipeline
 
 
@@ -42,6 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = sub.add_parser("migration-status", help="Show applied SQLite migration versions")
     status.add_argument("--database", required=True)
+
+    serve = sub.add_parser("serve", help="Open the P1 read-only editorial feed on localhost")
+    serve.add_argument("--database", required=True)
+    serve.add_argument("--host", default="127.0.0.1", help="Loopback address only; default 127.0.0.1")
+    serve.add_argument("--port", type=int, default=8765)
     return parser
 
 
@@ -73,6 +79,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "migration-status":
             versions = SQLiteStore(args.database).migration_versions()
             print(json.dumps({"migration_versions": list(versions)}, sort_keys=True))
+            return 0
+        if args.command == "serve":
+            serve_editorial_feed(args.database, host=args.host, port=args.port)
             return 0
         raise AssertionError("unreachable")
     except (RadioNewsError, ValueError) as exc:
