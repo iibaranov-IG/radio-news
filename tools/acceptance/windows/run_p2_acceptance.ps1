@@ -6,7 +6,11 @@ param(
     [string]$WorkDir = "D:\kpnews\p2-acceptance",
     [int]$Port = 8877,
     [int]$ExpectedFeedCount = 20,
-    [string]$ExpectedSourceDisplayName = "РИА Новости · офлайн-снимок",
+    [string]$ExpectedSourceDisplayName = [Text.Encoding]::UTF8.GetString(
+        [Convert]::FromBase64String(
+            "0KDQmNCQINCd0L7QstC+0YHRgtC4IMK3INC+0YTQu9Cw0LnQvS3RgdC90LjQvNC+0Lo="
+        )
+    ),
     [string]$ProductHead = "1aafddaaae2747585847642b2c2ba46253fa20b4",
     [string]$ExpectedWheelSha256 = "7d2da463519e0640a8cfbd718f6779f4b82eecdf6b4e7e0b69b1e41dc6e58e9e"
 )
@@ -36,17 +40,17 @@ $repositoryRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
 $wheelPath = (Resolve-Path $Wheel).Path
 $databasePath = (Resolve-Path $Database).Path
 
-$gitTop = (Invoke-Git @("-C", $repositoryRoot, "rev-parse", "--show-toplevel"))[0].Trim()
+$gitTop = @(Invoke-Git @("-C", $repositoryRoot, "rev-parse", "--show-toplevel"))[0].Trim()
 if ([IO.Path]::GetFullPath($gitTop).TrimEnd('\') -ne [IO.Path]::GetFullPath($repositoryRoot).TrimEnd('\')) {
     throw "Acceptance script is not running from the expected repository root: $repositoryRoot"
 }
 
-$dirty = Invoke-Git @("-C", $repositoryRoot, "status", "--porcelain")
+$dirty = @(Invoke-Git @("-C", $repositoryRoot, "status", "--porcelain"))
 if ($dirty.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace(($dirty -join ""))) {
     throw "Repository working tree is not clean. Commit or discard local changes before acceptance."
 }
 
-$harnessHead = (Invoke-Git @("-C", $repositoryRoot, "rev-parse", "HEAD"))[0].Trim()
+$harnessHead = @(Invoke-Git @("-C", $repositoryRoot, "rev-parse", "HEAD"))[0].Trim()
 & git -C $repositoryRoot merge-base --is-ancestor $ProductHead $harnessHead
 if ($LASTEXITCODE -ne 0) {
     throw "Product head $ProductHead is not an ancestor of current checkout $harnessHead"
@@ -56,12 +60,12 @@ $allowedHarnessPaths = @(
     "tools/acceptance/windows/README.md",
     "tools/acceptance/windows/run_p2_acceptance.ps1"
 )
-$changedSinceProduct = Invoke-Git @("-C", $repositoryRoot, "diff", "--name-only", "$ProductHead..$harnessHead")
+$changedSinceProduct = @(Invoke-Git @("-C", $repositoryRoot, "diff", "--name-only", "$ProductHead..$harnessHead"))
 $unexpected = @($changedSinceProduct | Where-Object {
     -not [string]::IsNullOrWhiteSpace($_) -and $_ -notin $allowedHarnessPaths
 })
 if ($unexpected.Count -gt 0) {
-    throw "Unexpected product changes after exact product head $ProductHead: $($unexpected -join ', ')"
+    throw "Unexpected product changes after exact product head ${ProductHead}: $($unexpected -join ', ')"
 }
 
 $wheelSha = (Get-FileHash $wheelPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -183,7 +187,7 @@ try {
     Start-Process $storyUrl
     Write-Host ""
     Write-Host "P2 Story and Evidence View opened: $storyUrl" -ForegroundColor Cyan
-    Write-Host "Check the visible chain: Story → RawItem/NormalizedItem → Claim → Fact → Source → VerificationResult → provenance."
+    Write-Host "Check the visible chain: Story -> RawItem/NormalizedItem -> Claim -> Fact -> Source -> VerificationResult -> provenance."
 
     do {
         $verdict = (Read-Host "Editorial verdict: PASS or CHANGES REQUIRED").Trim().ToUpperInvariant()
