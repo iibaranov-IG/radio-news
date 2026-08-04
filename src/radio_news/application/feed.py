@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -58,7 +59,7 @@ class EditorialFeedService:
 
     def snapshot(self) -> FeedSnapshot:
         try:
-            with self._connect_read_only() as connection:
+            with closing(self._connect_read_only()) as connection:
                 rows = connection.execute(
                     """
                     SELECT
