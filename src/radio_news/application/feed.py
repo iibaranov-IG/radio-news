@@ -12,6 +12,7 @@ from ..errors import RadioNewsError
 @dataclass(frozen=True, slots=True)
 class EditorialFeedItem:
     raw_item_id: str
+    story_id: str | None
     title: str
     source_id: str
     source_name: str
@@ -19,7 +20,7 @@ class EditorialFeedItem:
     fetched_at: str
     processing_state: str
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, str | None]:
         return asdict(self)
 
 
@@ -58,7 +59,8 @@ class EditorialFeedService:
             with closing(self._connect_read_only()) as connection:
                 rows = connection.execute(
                     """
-                    SELECT r.id AS raw_item_id, COALESCE(n.title, r.raw_title) AS title,
+                    SELECT r.id AS raw_item_id, claim_link.story_id,
+                           COALESCE(n.title, r.raw_title) AS title,
                            s.source_id, s.display_name AS source_name,
                            r.published_at, r.fetched_at,
                            CASE
@@ -85,12 +87,25 @@ class EditorialFeedService:
                     FROM raw_items r
                     JOIN sources s ON s.source_id=r.source_id
                     LEFT JOIN normalized_items n ON n.raw_item_id=r.id
+                    LEFT JOIN claims claim_link ON claim_link.raw_item_id=r.id
                     ORDER BY r.published_at DESC, r.id ASC
                     """
                 ).fetchall()
         except sqlite3.Error as exc:
             raise RadioNewsError(f"database is not a compatible radio-news database: {exc}") from exc
         return FeedSnapshot(
-            items=tuple(EditorialFeedItem(row["raw_item_id"], row["title"], row["source_id"], row["source_name"], row["published_at"], row["fetched_at"], row["processing_state"]) for row in rows),
+            items=tuple(
+                EditorialFeedItem(
+                    row["raw_item_id"],
+                    row["story_id"],
+                    row["title"],
+                    row["source_id"],
+                    row["source_name"],
+                    row["published_at"],
+                    row["fetched_at"],
+                    row["processing_state"],
+                )
+                for row in rows
+            ),
             database_path=str(self.database_path),
         )
