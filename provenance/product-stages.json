@@ -8,6 +8,7 @@
   "stages": [
     {
       "stage_id": "PRODUCT_SLICE_P1",
+      "authorized_stage": "PRODUCT_SLICE_P1",
       "title": "Read-only Editorial Feed",
       "implementation_authorized": true,
       "prerequisite": "FIRST_INDEPENDENT_VERTICAL_SLICE_MERGED",
@@ -39,24 +40,28 @@
     },
     {
       "stage_id": "PRODUCT_SLICE_P2",
+      "authorized_stage": "PRODUCT_SLICE_P2",
       "title": "Story and Evidence View",
       "implementation_authorized": false,
       "blocked_until": "PRODUCT_SLICE_P1_GATE_PASS"
     },
     {
       "stage_id": "PRODUCT_SLICE_P3",
+      "authorized_stage": "PRODUCT_SLICE_P3",
       "title": "Manual Editorial Selection",
       "implementation_authorized": false,
       "blocked_until": "PRODUCT_SLICE_P2_GATE_PASS"
     },
     {
       "stage_id": "PRODUCT_SLICE_P4",
+      "authorized_stage": "PRODUCT_SLICE_P4",
       "title": "Deterministic Draft Edition",
       "implementation_authorized": false,
       "blocked_until": "PRODUCT_SLICE_P3_GATE_PASS"
     },
     {
       "stage_id": "PRODUCT_SLICE_P5",
+      "authorized_stage": "PRODUCT_SLICE_P5",
       "title": "First Editorial Acceptance",
       "implementation_authorized": false,
       "blocked_until": "PRODUCT_SLICE_P4_GATE_PASS"
