@@ -1,9 +1,8 @@
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$Wheel,
-
+    [string]$Wheel = "",
     [string]$Database = "D:\kpnews\work\radio-news.sqlite",
     [string]$WorkDir = "D:\kpnews\p2-acceptance",
+    [string]$BuildDir = "D:\kpnews\p2-build",
     [int]$Port = 8877,
     [int]$ExpectedFeedCount = 20,
     [string]$ExpectedSourceDisplayName = [Text.Encoding]::UTF8.GetString(
@@ -31,13 +30,19 @@ function Invoke-Git([string[]]$Arguments) {
     return @($output)
 }
 
+function Invoke-Native([string]$FilePath, [string[]]$Arguments, [string]$FailureMessage) {
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw $FailureMessage
+    }
+}
+
 if ($Port -lt 1 -or $Port -gt 65535) {
     throw "Port must be between 1 and 65535"
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repositoryRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
-$wheelPath = (Resolve-Path $Wheel).Path
 $databasePath = (Resolve-Path $Database).Path
 
 $gitTop = @(Invoke-Git @("-C", $repositoryRoot, "rev-parse", "--show-toplevel"))[0].Trim()
@@ -68,37 +73,100 @@ if ($unexpected.Count -gt 0) {
     throw "Unexpected product changes after exact product head ${ProductHead}: $($unexpected -join ', ')"
 }
 
+New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+$workPath = (Resolve-Path $WorkDir).Path
+$evidenceDir = Join-Path $workPath "evidence"
+New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
+
+$wheelOrigin = "provided"
+if ([string]::IsNullOrWhiteSpace($Wheel)) {
+    New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
+    $buildPath = (Resolve-Path $BuildDir).Path
+    $shortHead = $ProductHead.Substring(0, 12)
+    $sourcePath = Join-Path $buildPath "source-$shortHead"
+    $distPath = Join-Path $buildPath "dist-$shortHead"
+
+    & git -C $repositoryRoot worktree remove --force $sourcePath 2>$null
+    & git -C $repositoryRoot worktree prune
+    if (Test-Path $sourcePath) {
+        Remove-Item $sourcePath -Recurse -Force
+    }
+    if (Test-Path $distPath) {
+        Remove-Item $distPath -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $distPath -Force | Out-Null
+
+    Invoke-Git @("-C", $repositoryRoot, "worktree", "add", "--detach", $sourcePath, $ProductHead) | Out-Null
+    try {
+        $builtHead = @(Invoke-Git @("-C", $sourcePath, "rev-parse", "HEAD"))[0].Trim()
+        if ($builtHead -ne $ProductHead) {
+            throw "Detached build worktree is on $builtHead instead of $ProductHead"
+        }
+
+        $buildDirty = @(Invoke-Git @("-C", $sourcePath, "status", "--porcelain"))
+        if ($buildDirty.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace(($buildDirty -join ""))) {
+            throw "Detached product worktree is not clean"
+        }
+
+        Invoke-Native "py" @(
+            "-3.11", "-m", "pip", "wheel",
+            "--disable-pip-version-check",
+            "--no-deps",
+            "--wheel-dir", $distPath,
+            $sourcePath
+        ) "Building the exact-head wheel from Git failed"
+
+        $wheels = @(Get-ChildItem $distPath -Filter "*.whl" -File)
+        if ($wheels.Count -ne 1) {
+            throw "Expected exactly one wheel in $distPath, found $($wheels.Count)"
+        }
+        $wheelPath = $wheels[0].FullName
+        $ExpectedWheelSha256 = (Get-FileHash $wheelPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $wheelOrigin = "git-build"
+
+        $buildEvidence = [ordered]@{
+            schema_version = 1
+            product_head = $ProductHead
+            harness_head = $harnessHead
+            source_worktree = $sourcePath
+            wheel_path = $wheelPath
+            wheel_sha256 = $ExpectedWheelSha256
+            built_from_clean_detached_worktree = $true
+            python = (& py -3.11 --version 2>&1 | Out-String).Trim()
+        }
+        Write-Utf8NoBom (Join-Path $evidenceDir "p2-wheel-build-evidence.json") (
+            $buildEvidence | ConvertTo-Json -Depth 10
+        )
+    } finally {
+        & git -C $repositoryRoot worktree remove --force $sourcePath 2>$null
+        & git -C $repositoryRoot worktree prune
+    }
+} else {
+    $wheelPath = (Resolve-Path $Wheel).Path
+}
+
 $wheelSha = (Get-FileHash $wheelPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($wheelSha -ne $ExpectedWheelSha256.ToLowerInvariant()) {
     throw "Wheel SHA-256 mismatch. Expected $ExpectedWheelSha256, got $wheelSha"
 }
 
 $databaseShaBefore = (Get-FileHash $databasePath -Algorithm SHA256).Hash.ToLowerInvariant()
-New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
-$workPath = (Resolve-Path $WorkDir).Path
 $venv = Join-Path $workPath ".venv"
-$evidenceDir = Join-Path $workPath "evidence"
-New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
-
 if (Test-Path $venv) {
     Remove-Item $venv -Recurse -Force
 }
 
-& py -3.11 -m venv $venv
-if ($LASTEXITCODE -ne 0) {
-    throw "Python 3.11 venv creation failed"
-}
+Invoke-Native "py" @("-3.11", "-m", "venv", $venv) "Python 3.11 venv creation failed"
 
 $python = Join-Path $venv "Scripts\python.exe"
 $radioNews = Join-Path $venv "Scripts\radio-news.exe"
-& $python -m pip install --disable-pip-version-check --force-reinstall $wheelPath
-if ($LASTEXITCODE -ne 0) {
-    throw "Wheel installation failed"
-}
-& $python -m pip check
-if ($LASTEXITCODE -ne 0) {
-    throw "pip check failed"
-}
+Invoke-Native $python @(
+    "-m", "pip", "install",
+    "--disable-pip-version-check",
+    "--force-reinstall",
+    $wheelPath
+) "Wheel installation failed"
+Invoke-Native $python @("-m", "pip", "check") "pip check failed"
 
 $stdout = Join-Path $evidenceDir "server.stdout.log"
 $stderr = Join-Path $evidenceDir "server.stderr.log"
@@ -124,7 +192,6 @@ try {
                 break
             }
         } catch {
-            # Retry until timeout.
         }
     }
     if (-not $ready) {
@@ -139,11 +206,16 @@ try {
         throw "P1 regression: expected $ExpectedFeedCount feed items, got $($feed.count)"
     }
 
-    $first = @($feed.items | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.story_id) }) | Select-Object -First 1
+    $first = @($feed.items | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string]$_.story_id)
+    }) | Select-Object -First 1
     if ($null -eq $first) {
         throw "P2 failure: no feed card contains story_id"
     }
-    if (-not [string]::IsNullOrWhiteSpace($ExpectedSourceDisplayName) -and [string]$first.source_name -ne $ExpectedSourceDisplayName) {
+    if (
+        -not [string]::IsNullOrWhiteSpace($ExpectedSourceDisplayName) -and
+        [string]$first.source_name -ne $ExpectedSourceDisplayName
+    ) {
         throw "P1 attribution regression: expected '$ExpectedSourceDisplayName', got '$($first.source_name)'"
     }
 
@@ -161,13 +233,19 @@ try {
         throw "P2 failure: Story id does not match feed story_id"
     }
 
-    foreach ($name in @("sources", "raw_items", "normalized_items", "claims", "facts", "verification_results", "provenance")) {
+    foreach ($name in @(
+        "sources", "raw_items", "normalized_items", "claims",
+        "facts", "verification_results", "provenance"
+    )) {
         if ($null -eq $story.$name -or @($story.$name).Count -lt 1) {
             throw "P2 failure: linked section '$name' is empty"
         }
     }
 
-    foreach ($marker in @("Story", "Source", "RawItem", "NormalizedItem", "Claim", "Fact", "VerificationResult", "Provenance")) {
+    foreach ($marker in @(
+        "Story", "Source", "RawItem", "NormalizedItem",
+        "Claim", "Fact", "VerificationResult", "Provenance"
+    )) {
         if (-not $storyHtml.Contains($marker)) {
             throw "P2 failure: HTML does not contain '$marker'"
         }
@@ -187,7 +265,7 @@ try {
     Start-Process $storyUrl
     Write-Host ""
     Write-Host "P2 Story and Evidence View opened: $storyUrl" -ForegroundColor Cyan
-    Write-Host "Check the visible chain: Story -> RawItem/NormalizedItem -> Claim -> Fact -> Source -> VerificationResult -> provenance."
+    Write-Host "Check Story, Source, RawItem, NormalizedItem, Claim, Fact, VerificationResult, and Provenance."
 
     do {
         $verdict = (Read-Host "Editorial verdict: PASS or CHANGES REQUIRED").Trim().ToUpperInvariant()
@@ -204,6 +282,7 @@ try {
         pull_request = 9
         product_head = $ProductHead
         harness_head = $harnessHead
+        wheel_origin = $wheelOrigin
         wheel_path = $wheelPath
         wheel_sha256 = $wheelSha
         database_path = $databasePath
@@ -235,6 +314,8 @@ try {
     Write-Host ""
     Write-Host "P2 TECHNICAL ACCEPTANCE: PASS" -ForegroundColor Green
     Write-Host "P2 EDITORIAL VERDICT: $verdict"
+    Write-Host "Wheel origin: $wheelOrigin"
+    Write-Host "Wheel SHA-256: $wheelSha"
     Write-Host "SQLite SHA-256 unchanged: $databaseShaAfter"
     Write-Host "Evidence: $evidencePath"
 } finally {
