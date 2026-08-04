@@ -137,13 +137,24 @@ def _handler(service: EditorialFeedService) -> type[BaseHTTPRequestHandler]:
     return EditorialFeedHandler
 
 
-def serve_editorial_feed(database_path: str | Path, *, host: str = "127.0.0.1", port: int = 8765) -> None:
+def create_editorial_feed_server(
+    database_path: str | Path,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+) -> ThreadingHTTPServer:
     _validate_loopback_host(host)
-    if not 1 <= port <= 65535:
-        raise RadioNewsError("port must be between 1 and 65535")
+    if not 0 <= port <= 65535:
+        raise RadioNewsError("port must be between 0 and 65535")
     service = EditorialFeedService(database_path)
     service.snapshot()  # fail before binding when the database is missing or incompatible
-    server = ThreadingHTTPServer((host, port), _handler(service))
+    return ThreadingHTTPServer((host, port), _handler(service))
+
+
+def serve_editorial_feed(database_path: str | Path, *, host: str = "127.0.0.1", port: int = 8765) -> None:
+    if port == 0:
+        raise RadioNewsError("CLI port must be between 1 and 65535")
+    server = create_editorial_feed_server(database_path, host=host, port=port)
     print(f"КПNEWS: http://{host}:{server.server_port}")
     try:
         server.serve_forever()
