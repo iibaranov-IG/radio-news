@@ -146,6 +146,7 @@ jobs:
           path: |
             ci-provenance.txt
             pytest-result.txt
+            dist/*.whl
             /tmp/radio-news-acceptance/feed.html
             /tmp/radio-news-acceptance/feed.json
             /tmp/radio-news-acceptance/story.html
