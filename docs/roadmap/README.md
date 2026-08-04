@@ -5,9 +5,10 @@
 Главная цель проекта — не накопление архитектуры и инфраструктуры, а видимый редакционный продукт, который можно открыть, использовать и оценить по реальному выпуску.
 
 - [Product-First Roadmap — ближайший обязательный приоритет](product-first-roadmap.md)
+- [Разрешение на реализацию Product Slice P1](p1-authorization.md)
 - [КПNEWS — полная дорожная карта развития](kpnews-roadmap.md)
 
-До прохождения первого видимого редакционного MVP ближайшая последовательность определяется Product-First Roadmap:
+Product-First Roadmap определяет порядок:
 
 ```text
 P1 Read-only Editorial Feed
@@ -16,6 +17,8 @@ P1 Read-only Editorial Feed
 → P4 Deterministic Draft Edition
 → P5 First Editorial Acceptance
 ```
+
+Но этот порядок не является разрешением выполнять все этапы сразу. Сейчас формально разрешён только `P1 Read-only Editorial Feed`. Этапы `P2–P5` остаются заблокированными до прохождения предыдущего Product Gate. Машиночитаемая граница хранится в `provenance/product-stages.json`.
 
 Зелёный CI, готовая схема данных и работающий CLI означают `Engineering Ready`, но не означают `Product Ready` без понятного пользовательского результата на экране.
 
