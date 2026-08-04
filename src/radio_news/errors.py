@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class RadioNewsError(RuntimeError):
-    """Base class for expected first-slice failures."""
+    """Base class for expected radio-news failures."""
 
 
 class ConfigError(RadioNewsError):
@@ -27,3 +27,7 @@ class MigrationError(RadioNewsError):
 
 class MigrationChecksumMismatch(MigrationError):
     """An already-applied migration no longer has the recorded checksum."""
+
+
+class StoryNotFound(RadioNewsError):
+    """A requested persisted Story does not exist."""
