@@ -37,6 +37,50 @@ function Invoke-Native([string]$FilePath, [string[]]$Arguments, [string]$Failure
     }
 }
 
+function Test-GitWorktreeRegistered(
+    [string]$RepositoryRoot,
+    [string]$CandidatePath
+) {
+    $candidateFullPath = [IO.Path]::GetFullPath($CandidatePath).TrimEnd('\')
+    $worktreeList = @(Invoke-Git @(
+        "-C", $RepositoryRoot,
+        "worktree", "list", "--porcelain"
+    ))
+
+    foreach ($line in $worktreeList) {
+        if ($line.StartsWith("worktree ")) {
+            $listedPath = $line.Substring(9).Trim()
+            $listedFullPath = [IO.Path]::GetFullPath($listedPath).TrimEnd('\')
+            if ($listedFullPath -eq $candidateFullPath) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Remove-ProductBuildWorktree(
+    [string]$RepositoryRoot,
+    [string]$SourcePath
+) {
+    if (Test-GitWorktreeRegistered $RepositoryRoot $SourcePath) {
+        Invoke-Git @(
+            "-C", $RepositoryRoot,
+            "worktree", "remove", "--force", $SourcePath
+        ) | Out-Null
+    }
+
+    Invoke-Git @(
+        "-C", $RepositoryRoot,
+        "worktree", "prune"
+    ) | Out-Null
+
+    if (Test-Path -LiteralPath $SourcePath) {
+        Remove-Item -LiteralPath $SourcePath -Recurse -Force
+    }
+}
+
 if ($Port -lt 1 -or $Port -gt 65535) {
     throw "Port must be between 1 and 65535"
 }
@@ -86,13 +130,9 @@ if ([string]::IsNullOrWhiteSpace($Wheel)) {
     $sourcePath = Join-Path $buildPath "source-$shortHead"
     $distPath = Join-Path $buildPath "dist-$shortHead"
 
-    & git -C $repositoryRoot worktree remove --force $sourcePath 2>$null
-    & git -C $repositoryRoot worktree prune
-    if (Test-Path $sourcePath) {
-        Remove-Item $sourcePath -Recurse -Force
-    }
-    if (Test-Path $distPath) {
-        Remove-Item $distPath -Recurse -Force
+    Remove-ProductBuildWorktree $repositoryRoot $sourcePath
+    if (Test-Path -LiteralPath $distPath) {
+        Remove-Item -LiteralPath $distPath -Recurse -Force
     }
     New-Item -ItemType Directory -Path $distPath -Force | Out-Null
 
@@ -138,8 +178,7 @@ if ([string]::IsNullOrWhiteSpace($Wheel)) {
             $buildEvidence | ConvertTo-Json -Depth 10
         )
     } finally {
-        & git -C $repositoryRoot worktree remove --force $sourcePath 2>$null
-        & git -C $repositoryRoot worktree prune
+        Remove-ProductBuildWorktree $repositoryRoot $sourcePath
     }
 } else {
     $wheelPath = (Resolve-Path $Wheel).Path
