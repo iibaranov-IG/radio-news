@@ -29,9 +29,6 @@ function Invoke-NativeCommand(
 ) {
     $previousPreference = $ErrorActionPreference
     try {
-        # Windows PowerShell 5.1 turns native stderr into ErrorRecord objects.
-        # A successful native command may legitimately write progress to stderr,
-        # so success is determined exclusively by the process exit code.
         $ErrorActionPreference = "Continue"
         $rawOutput = & $FilePath @Arguments 2>&1
         $exitCode = $LASTEXITCODE
@@ -111,10 +108,8 @@ $gitTop = @(Invoke-Git @(
     "-C", $repositoryRoot,
     "rev-parse", "--show-toplevel"
 ))[0].Trim()
-if (
-    [IO.Path]::GetFullPath($gitTop).TrimEnd('\') -ne
-    [IO.Path]::GetFullPath($repositoryRoot).TrimEnd('\')
-) {
+
+if ([IO.Path]::GetFullPath($gitTop).TrimEnd('\') -ne [IO.Path]::GetFullPath($repositoryRoot).TrimEnd('\')) {
     throw "Acceptance script is not running from the expected repository root: $repositoryRoot"
 }
 
@@ -130,6 +125,7 @@ $harnessHead = @(Invoke-Git @(
     "-C", $repositoryRoot,
     "rev-parse", "HEAD"
 ))[0].Trim()
+
 Invoke-Git @(
     "-C", $repositoryRoot,
     "merge-base", "--is-ancestor", $ProductHead, $harnessHead
@@ -188,10 +184,7 @@ if ([string]::IsNullOrWhiteSpace($Wheel)) {
             "-C", $sourcePath,
             "status", "--porcelain"
         ))
-        if (
-            $buildDirty.Count -gt 0 -and
-            -not [string]::IsNullOrWhiteSpace(($buildDirty -join ""))
-        ) {
+        if ($buildDirty.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace(($buildDirty -join ""))) {
             throw "Detached product worktree is not clean"
         }
 
@@ -210,15 +203,13 @@ if ([string]::IsNullOrWhiteSpace($Wheel)) {
         }
 
         $wheelPath = $wheels[0].FullName
-        $ExpectedWheelSha256 = (
-            Get-FileHash $wheelPath -Algorithm SHA256
-        ).Hash.ToLowerInvariant()
+        $ExpectedWheelSha256 = (Get-FileHash $wheelPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $wheelOrigin = "git-build"
 
-        $pythonVersion = @(
-            Invoke-NativeCommand "py" @("-3.11", "--version") `
-                "Reading Python version failed"
-        ) -join " "
+        $pythonVersionOutput = @(Invoke-NativeCommand "py" @(
+            "-3.11", "--version"
+        ) "Reading Python version failed")
+        $pythonVersion = ($pythonVersionOutput -join " ").Trim()
 
         $buildEvidence = [ordered]@{
             schema_version = 1
@@ -228,11 +219,10 @@ if ([string]::IsNullOrWhiteSpace($Wheel)) {
             wheel_path = $wheelPath
             wheel_sha256 = $ExpectedWheelSha256
             built_from_clean_detached_worktree = $true
-            python = $pythonVersion.Trim()
+            python = $pythonVersion
         }
-        Write-Utf8NoBom (
-            Join-Path $evidenceDir "p2-wheel-build-evidence.json"
-        ) ($buildEvidence | ConvertTo-Json -Depth 10)
+        $buildEvidencePath = Join-Path $evidenceDir "p2-wheel-build-evidence.json"
+        Write-Utf8NoBom $buildEvidencePath ($buildEvidence | ConvertTo-Json -Depth 10)
     } finally {
         Remove-ProductBuildWorktree $repositoryRoot $sourcePath
     }
@@ -240,16 +230,12 @@ if ([string]::IsNullOrWhiteSpace($Wheel)) {
     $wheelPath = (Resolve-Path $Wheel).Path
 }
 
-$wheelSha = (
-    Get-FileHash $wheelPath -Algorithm SHA256
-).Hash.ToLowerInvariant()
+$wheelSha = (Get-FileHash $wheelPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($wheelSha -ne $ExpectedWheelSha256.ToLowerInvariant()) {
     throw "Wheel SHA-256 mismatch. Expected $ExpectedWheelSha256, got $wheelSha"
 }
 
-$databaseShaBefore = (
-    Get-FileHash $databasePath -Algorithm SHA256
-).Hash.ToLowerInvariant()
+$databaseShaBefore = (Get-FileHash $databasePath -Algorithm SHA256).Hash.ToLowerInvariant()
 
 $venv = Join-Path $workPath ".venv"
 if (Test-Path -LiteralPath $venv) {
@@ -295,8 +281,7 @@ try {
             throw "KPNEWS exited before readiness. See $stderr"
         }
         try {
-            $health = Invoke-RestMethod \
-                "http://127.0.0.1:$Port/healthz" -TimeoutSec 2
+            $health = Invoke-RestMethod "http://127.0.0.1:$Port/healthz" -TimeoutSec 2
             if ($health.status -eq "ok") {
                 $ready = $true
                 break
@@ -322,10 +307,7 @@ try {
     if ($null -eq $first) {
         throw "P2 failure: no feed card contains story_id"
     }
-    if (
-        -not [string]::IsNullOrWhiteSpace($ExpectedSourceDisplayName) -and
-        [string]$first.source_name -ne $ExpectedSourceDisplayName
-    ) {
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedSourceDisplayName) -and [string]$first.source_name -ne $ExpectedSourceDisplayName) {
         throw "P1 attribution regression: expected '$ExpectedSourceDisplayName', got '$($first.source_name)'"
     }
 
@@ -334,11 +316,9 @@ try {
     $storyUrl = "http://127.0.0.1:$Port/stories/$storyPath"
     $storyApiUrl = "http://127.0.0.1:$Port/api/stories/$storyPath"
 
-    $storyApiResponse = Invoke-WebRequest \
-        $storyApiUrl -UseBasicParsing -TimeoutSec 10
+    $storyApiResponse = Invoke-WebRequest $storyApiUrl -UseBasicParsing -TimeoutSec 10
     $story = $storyApiResponse.Content | ConvertFrom-Json
-    $storyHtmlResponse = Invoke-WebRequest \
-        $storyUrl -UseBasicParsing -TimeoutSec 10
+    $storyHtmlResponse = Invoke-WebRequest $storyUrl -UseBasicParsing -TimeoutSec 10
     $storyHtml = $storyHtmlResponse.Content
 
     if ([string]$story.story.id -ne $storyId) {
@@ -363,24 +343,16 @@ try {
         }
     }
 
-    $relations = @($story.provenance | ForEach-Object {
-        [string]$_.relation
-    })
+    $relations = @($story.provenance | ForEach-Object { [string]$_.relation })
     foreach ($requiredRelation in @("supported_by", "evaluated_by")) {
         if ($requiredRelation -notin $relations) {
             throw "P2 failure: provenance relation '$requiredRelation' is missing"
         }
     }
 
-    Write-Utf8NoBom (
-        Join-Path $evidenceDir "feed.json"
-    ) $feedResponse.Content
-    Write-Utf8NoBom (
-        Join-Path $evidenceDir "story.json"
-    ) $storyApiResponse.Content
-    Write-Utf8NoBom (
-        Join-Path $evidenceDir "story.html"
-    ) $storyHtml
+    Write-Utf8NoBom (Join-Path $evidenceDir "feed.json") $feedResponse.Content
+    Write-Utf8NoBom (Join-Path $evidenceDir "story.json") $storyApiResponse.Content
+    Write-Utf8NoBom (Join-Path $evidenceDir "story.html") $storyHtml
 
     Start-Process $storyUrl
     Write-Host ""
@@ -388,14 +360,10 @@ try {
     Write-Host "Check Story, Source, RawItem, NormalizedItem, Claim, Fact, VerificationResult, and Provenance."
 
     do {
-        $verdict = (
-            Read-Host "Editorial verdict: PASS or CHANGES REQUIRED"
-        ).Trim().ToUpperInvariant()
+        $verdict = (Read-Host "Editorial verdict: PASS or CHANGES REQUIRED").Trim().ToUpperInvariant()
     } until ($verdict -in @("PASS", "CHANGES REQUIRED"))
 
-    $databaseShaAfter = (
-        Get-FileHash $databasePath -Algorithm SHA256
-    ).Hash.ToLowerInvariant()
+    $databaseShaAfter = (Get-FileHash $databasePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($databaseShaBefore -ne $databaseShaAfter) {
         throw "READ-ONLY FAILURE: SQLite SHA-256 changed"
     }
@@ -432,11 +400,8 @@ try {
         accepted = ($verdict -eq "PASS")
     }
 
-    $evidencePath = Join-Path \
-        $evidenceDir "p2-acceptance-evidence.json"
-    Write-Utf8NoBom $evidencePath (
-        $evidence | ConvertTo-Json -Depth 20
-    )
+    $evidencePath = Join-Path $evidenceDir "p2-acceptance-evidence.json"
+    Write-Utf8NoBom $evidencePath ($evidence | ConvertTo-Json -Depth 20)
 
     Write-Host ""
     Write-Host "P2 TECHNICAL ACCEPTANCE: PASS" -ForegroundColor Green
