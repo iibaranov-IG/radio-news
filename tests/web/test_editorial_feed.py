@@ -98,7 +98,7 @@ def test_incompatible_database_is_reported_in_browser(tmp_path: Path) -> None:
 def test_one_raw_item_remains_one_card_with_multiple_facts_and_policies(tmp_path: Path, app_config, now) -> None:
     database = tmp_path / "radio-news.sqlite"
     result = run_fixture_pipeline(app_config, database_path=database, editor_id="editor", now=now)
-    raw_id = result.raw_item_ids[0]
+    raw_id = result.items[0].raw_item_id
     with sqlite3.connect(database) as connection:
         claim_id, story_id = connection.execute("SELECT id,story_id FROM claims WHERE raw_item_id=?", (raw_id,)).fetchone()
         connection.execute("INSERT INTO facts VALUES (?,?,?,?,?,?)", ("fact-extra", story_id, "Extra fact", "editor", now.isoformat(), "APPROVED"))
