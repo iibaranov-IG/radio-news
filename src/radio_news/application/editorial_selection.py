@@ -41,6 +41,16 @@ class EditorialSelection:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class SelectionStoryOption:
+    story_id: str
+    title: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, str]:
+        return asdict(self)
+
+
 class EditorialSelectionService:
     """Transactional persistence for P3-owned editorial selection state only."""
 
@@ -59,7 +69,9 @@ class EditorialSelectionService:
         return connection
 
     @staticmethod
-    def _normalize_items(items: tuple[EditorialSelectionItem, ...] | list[EditorialSelectionItem]) -> tuple[EditorialSelectionItem, ...]:
+    def _normalize_items(
+        items: tuple[EditorialSelectionItem, ...] | list[EditorialSelectionItem],
+    ) -> tuple[EditorialSelectionItem, ...]:
         normalized = tuple(sorted(items, key=lambda item: item.position))
         story_ids = [item.story_id for item in normalized]
         if any(not story_id.strip() for story_id in story_ids):
@@ -102,7 +114,10 @@ class EditorialSelectionService:
                 missing = [
                     item.story_id
                     for item in normalized
-                    if connection.execute("SELECT 1 FROM stories WHERE id=?", (item.story_id,)).fetchone() is None
+                    if connection.execute(
+                        "SELECT 1 FROM stories WHERE id=?", (item.story_id,)
+                    ).fetchone()
+                    is None
                 ]
                 if missing:
                     raise RadioNewsError(f"selection references unknown Story: {missing[0]}")
@@ -137,10 +152,15 @@ class EditorialSelectionService:
 
     def load(self, selection_id: str) -> EditorialSelection:
         with closing(self._connect()) as connection:
-            selection = connection.execute(
-                "SELECT * FROM editorial_selections WHERE id=?",
-                (selection_id,),
-            ).fetchone()
+            try:
+                selection = connection.execute(
+                    "SELECT * FROM editorial_selections WHERE id=?",
+                    (selection_id,),
+                ).fetchone()
+            except sqlite3.OperationalError as exc:
+                raise RadioNewsError(
+                    "P3 schema is not available; apply packaged migrations before serving"
+                ) from exc
             if selection is None:
                 raise RadioNewsError(f"editorial selection not found: {selection_id}")
             rows = connection.execute(
@@ -159,7 +179,36 @@ class EditorialSelectionService:
                 created_at=selection["created_at"],
                 updated_at=selection["updated_at"],
                 items=tuple(
-                    EditorialSelectionItem(row["story_id"], row["role"], row["position"])
+                    EditorialSelectionItem(
+                        row["story_id"], row["role"], row["position"]
+                    )
                     for row in rows
                 ),
             )
+
+    def load_or_empty(
+        self, selection_id: str, *, title: str = "Редакционная подборка"
+    ) -> EditorialSelection:
+        try:
+            return self.load(selection_id)
+        except RadioNewsError as exc:
+            if str(exc) != f"editorial selection not found: {selection_id}":
+                raise
+            return EditorialSelection(
+                id=selection_id,
+                title=title,
+                status="DRAFT",
+                created_at="",
+                updated_at="",
+                items=(),
+            )
+
+    def list_story_options(self) -> tuple[SelectionStoryOption, ...]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                "SELECT id,title,created_at FROM stories ORDER BY created_at DESC,id ASC"
+            ).fetchall()
+        return tuple(
+            SelectionStoryOption(row["id"], row["title"], row["created_at"])
+            for row in rows
+        )
