@@ -63,8 +63,8 @@ def _horizon_authorized_targets() -> tuple[dict[str, dict[str, object]], list[st
 def _product_authorized_targets() -> list[str]:
     manifest = json.loads(PRODUCT_MANIFEST.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 1
-    assert manifest["active_stage"] == "PRODUCT_SLICE_P2"
-    assert manifest["authorization_document"] == "docs/product/p2-story-and-evidence-view.md"
+    assert manifest["active_stage"] == "PRODUCT_SLICE_P3"
+    assert manifest["authorization_document"] == "docs/product/p3-manual-editorial-selection.md"
     stages = {entry["stage_id"]: entry for entry in manifest["stages"]}
 
     p1 = stages["PRODUCT_SLICE_P1"]
@@ -77,16 +77,29 @@ def _product_authorized_targets() -> list[str]:
     assert p2["authorized_stage"] == "PRODUCT_SLICE_P2"
     assert p2["implementation_authorized"] is True
     assert p2["authorization_merge_commit"] == "e9f1de908383399ec3b909e341616e09d5148f41"
+    assert p2["implementation_merge_commit"] == "3ed3aa6623d5dbe16458c8bc45f76def1a921910"
+    assert p2["gate_status"] == "PASS"
     assert set(p2["authorized_existing_components"]) <= IMPLEMENTED
-    assert "no_database_migrations" in p2["constraints"]
-    assert "no_domain_writes" in p2["constraints"]
 
-    for stage_id in ("PRODUCT_SLICE_P3", "PRODUCT_SLICE_P4", "PRODUCT_SLICE_P5"):
+    p3 = stages["PRODUCT_SLICE_P3"]
+    assert p3["authorized_stage"] == "PRODUCT_SLICE_P3"
+    assert p3["implementation_authorized"] is True
+    assert p3["authorization_merge_commit"] == "2cf3849c4b3f493c7b01a3ac27fcac89310c145c"
+    assert set(p3["authorized_existing_components"]) <= IMPLEMENTED
+    assert "writes_confined_to_p3_selection_state" in p3["constraints"]
+    assert "evidence_domain_immutable" in p3["constraints"]
+    assert "additive_migration_only" in p3["constraints"]
+
+    for stage_id in ("PRODUCT_SLICE_P4", "PRODUCT_SLICE_P5"):
         stage = stages[stage_id]
         assert stage["authorized_stage"] == stage_id
         assert stage["implementation_authorized"] is False
 
-    return list(p1["authorized_paths"]) + list(p2["authorized_paths"])
+    return (
+        list(p1["authorized_paths"])
+        + list(p2["authorized_paths"])
+        + list(p3["authorized_paths"])
+    )
 
 
 def test_implementation_paths_are_covered_by_active_authorities() -> None:
