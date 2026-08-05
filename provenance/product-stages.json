@@ -2,9 +2,9 @@
   "schema_version": 1,
   "target_repository": "iibaranov-IG/radio-news",
   "product_roadmap": "docs/roadmap/product-first-roadmap.md",
-  "authorization_document": "docs/roadmap/p1-authorization.md",
-  "generated_at": "2026-08-04T05:35:00Z",
-  "active_stage": "PRODUCT_SLICE_P1",
+  "authorization_document": "docs/product/p2-story-and-evidence-view.md",
+  "generated_at": "2026-08-04T11:22:00Z",
+  "active_stage": "PRODUCT_SLICE_P2",
   "stages": [
     {
       "stage_id": "PRODUCT_SLICE_P1",
@@ -36,14 +36,44 @@
         "no_horizon_runtime_dependency",
         "no_domain_or_schema_writes"
       ],
-      "required_product_gate": "editor sees persisted news in a browser without terminal JSON"
+      "required_product_gate": "editor sees persisted news in a browser without terminal JSON",
+      "gate_status": "PASS",
+      "merge_commit": "b2296481c24098931c27124aef97f649dc9188fe"
     },
     {
       "stage_id": "PRODUCT_SLICE_P2",
       "authorized_stage": "PRODUCT_SLICE_P2",
       "title": "Story and Evidence View",
-      "implementation_authorized": false,
-      "blocked_until": "PRODUCT_SLICE_P1_GATE_PASS"
+      "implementation_authorized": true,
+      "prerequisite": "PRODUCT_SLICE_P1_FORMALLY_CLOSED",
+      "authorization_merge_commit": "e9f1de908383399ec3b909e341616e09d5148f41",
+      "authorized_paths": [
+        "src/radio_news/application/",
+        "src/radio_news/web/",
+        "tests/application/",
+        "tests/web/"
+      ],
+      "authorized_existing_components": [
+        "PKG-01",
+        "CLI-01",
+        "CONFIG-01",
+        "SQLITE-TARGET",
+        "CI-01",
+        "TEST-01"
+      ],
+      "constraints": [
+        "localhost_only",
+        "read_only_sqlite",
+        "no_outbound_http",
+        "no_horizon_runtime_dependency",
+        "no_domain_writes",
+        "no_database_migrations",
+        "no_editorial_selection",
+        "no_text_generation",
+        "no_ai_scoring",
+        "no_rundown"
+      ],
+      "required_product_gate": "editor opens a feed card and understands the complete linked Story evidence graph without database changes"
     },
     {
       "stage_id": "PRODUCT_SLICE_P3",

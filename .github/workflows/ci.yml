@@ -70,6 +70,16 @@ jobs:
           done
           curl -fsS http://127.0.0.1:8765/ > feed.html
           curl -fsS http://127.0.0.1:8765/api/feed > feed.json
+          STORY_PATH=$(/tmp/radio-news-venv/bin/python - <<'PY'
+          import json
+          import urllib.parse
+          from pathlib import Path
+          payload=json.loads(Path('feed.json').read_text(encoding='utf-8'))
+          print(urllib.parse.quote(payload['items'][0]['story_id'], safe=''))
+          PY
+          )
+          curl -fsS "http://127.0.0.1:8765/stories/${STORY_PATH}" > story.html
+          curl -fsS "http://127.0.0.1:8765/api/stories/${STORY_PATH}" > story.json
           kill $SERVER_PID
           wait $SERVER_PID || true
           trap - EXIT
@@ -77,13 +87,23 @@ jobs:
           /tmp/radio-news-venv/bin/python - <<'PY'
           import json
           from pathlib import Path
-          html = Path('feed.html').read_text(encoding='utf-8')
-          payload = json.loads(Path('feed.json').read_text(encoding='utf-8'))
-          assert 'КПNEWS' in html and 'Fixture KP' in html and 'READY' in html
-          assert payload['count'] == 1
-          assert payload['items'][0]['source_id'] == 'fixture-kp'
+          feed_html = Path('feed.html').read_text(encoding='utf-8')
+          feed = json.loads(Path('feed.json').read_text(encoding='utf-8'))
+          story_html = Path('story.html').read_text(encoding='utf-8')
+          story = json.loads(Path('story.json').read_text(encoding='utf-8'))
+          assert 'КПNEWS' in feed_html and 'Fixture KP' in feed_html and 'READY' in feed_html
+          assert feed['count'] == 1
+          assert feed['items'][0]['source_id'] == 'fixture-kp'
+          assert feed['items'][0]['story_id'] == story['story']['id']
+          for marker in ('Story','Source','RawItem','NormalizedItem','Claim','Fact','VerificationResult','Provenance'):
+              assert marker in story_html
+          assert story['sources'][0]['source_id'] == 'fixture-kp'
+          assert story['raw_items'] and story['normalized_items'] and story['claims'] and story['facts']
+          assert story['verification_results'][0]['status'] == 'READY'
+          assert {'supported_by','evaluated_by'} <= {edge['relation'] for edge in story['provenance']}
           PY
           echo "INSTALLED_P1_BROWSER_ACCEPTANCE=success" >> "$GITHUB_WORKSPACE/ci-provenance.txt"
+          echo "INSTALLED_P2_STORY_EVIDENCE_ACCEPTANCE=success" >> "$GITHUB_WORKSPACE/ci-provenance.txt"
 
       - name: Prove no Horizon runtime dependency
         run: |
@@ -122,10 +142,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: p1-ci-${{ github.run_id }}
+          name: p2-ci-${{ github.run_id }}
           path: |
             ci-provenance.txt
             pytest-result.txt
+            dist/*.whl
             /tmp/radio-news-acceptance/feed.html
             /tmp/radio-news-acceptance/feed.json
+            /tmp/radio-news-acceptance/story.html
+            /tmp/radio-news-acceptance/story.json
             /tmp/radio-news-acceptance/server.log

@@ -60,28 +60,38 @@ def _horizon_authorized_targets() -> tuple[dict[str, dict[str, object]], list[st
     return entries, targets
 
 
-def _p1_authorized_targets() -> list[str]:
+def _product_authorized_targets() -> list[str]:
     manifest = json.loads(PRODUCT_MANIFEST.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 1
-    assert manifest["active_stage"] == "PRODUCT_SLICE_P1"
+    assert manifest["active_stage"] == "PRODUCT_SLICE_P2"
+    assert manifest["authorization_document"] == "docs/product/p2-story-and-evidence-view.md"
     stages = {entry["stage_id"]: entry for entry in manifest["stages"]}
 
     p1 = stages["PRODUCT_SLICE_P1"]
     assert p1["authorized_stage"] == "PRODUCT_SLICE_P1"
     assert p1["implementation_authorized"] is True
-    assert set(p1["authorized_existing_components"]) <= IMPLEMENTED
+    assert p1["gate_status"] == "PASS"
+    assert p1["merge_commit"] == "b2296481c24098931c27124aef97f649dc9188fe"
 
-    for stage_id in ("PRODUCT_SLICE_P2", "PRODUCT_SLICE_P3", "PRODUCT_SLICE_P4", "PRODUCT_SLICE_P5"):
+    p2 = stages["PRODUCT_SLICE_P2"]
+    assert p2["authorized_stage"] == "PRODUCT_SLICE_P2"
+    assert p2["implementation_authorized"] is True
+    assert p2["authorization_merge_commit"] == "e9f1de908383399ec3b909e341616e09d5148f41"
+    assert set(p2["authorized_existing_components"]) <= IMPLEMENTED
+    assert "no_database_migrations" in p2["constraints"]
+    assert "no_domain_writes" in p2["constraints"]
+
+    for stage_id in ("PRODUCT_SLICE_P3", "PRODUCT_SLICE_P4", "PRODUCT_SLICE_P5"):
         stage = stages[stage_id]
         assert stage["authorized_stage"] == stage_id
         assert stage["implementation_authorized"] is False
 
-    return list(p1["authorized_paths"])
+    return list(p1["authorized_paths"]) + list(p2["authorized_paths"])
 
 
 def test_implementation_paths_are_covered_by_active_authorities() -> None:
     _, horizon_targets = _horizon_authorized_targets()
-    product_targets = _p1_authorized_targets()
+    product_targets = _product_authorized_targets()
     authorized_targets = horizon_targets + product_targets
     uncovered = sorted(
         path
