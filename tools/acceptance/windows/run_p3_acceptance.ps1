@@ -113,7 +113,15 @@ function Start-Kpnews(
 
 function Get-Selection([int]$ListenPort) {
     $response = Invoke-WebRequest "http://127.0.0.1:$ListenPort/api/selections/current" -UseBasicParsing -TimeoutSec 10
-    return $response.Content | ConvertFrom-Json
+    $payload = $response.Content | ConvertFrom-Json
+    if ($null -eq $payload -or $payload.PSObject.Properties.Name -notcontains "selection") {
+        throw "P3 acceptance API returned an unexpected payload without 'selection'"
+    }
+    $selection = $payload.selection
+    if ($null -eq $selection -or $selection.PSObject.Properties.Name -notcontains "items") {
+        throw "P3 acceptance API returned a selection without 'items'. Save the selection in the browser and retry."
+    }
+    return $selection
 }
 
 function Get-EvidenceDigest([string]$Python, [string]$DatabasePath, [string]$OutputPath) {
