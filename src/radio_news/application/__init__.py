@@ -1,5 +1,11 @@
 """Application services for KPNEWS product slices."""
 
+from .draft_edition import (
+    GENERATOR_VERSION,
+    DraftEdition,
+    DraftEditionItem,
+    DraftEditionService,
+)
 from .editorial_selection import (
     EditorialSelection,
     EditorialSelectionItem,
@@ -23,6 +29,9 @@ from .story_evidence import (
 
 __all__ = [
     "ClaimEvidenceRecord",
+    "DraftEdition",
+    "DraftEditionItem",
+    "DraftEditionService",
     "EditorialFeedItem",
     "EditorialFeedService",
     "EditorialSelection",
@@ -31,6 +40,7 @@ __all__ = [
     "FactClaimEvidenceLink",
     "FactEvidenceRecord",
     "FeedSnapshot",
+    "GENERATOR_VERSION",
     "NormalizedItemEvidenceRecord",
     "ProvenanceEdge",
     "RawItemEvidenceRecord",
