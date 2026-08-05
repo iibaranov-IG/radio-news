@@ -15,7 +15,7 @@ from radio_news.storage.sqlite import SQLiteStore
 def _database(tmp_path):
     path = tmp_path / "radio-news.sqlite"
     store = SQLiteStore(path)
-    assert store.migrate() == (1, 2)
+    assert store.migrate() == (1, 2, 3)
     with store.connect() as connection:
         connection.executemany(
             "INSERT INTO stories(id,canonical_key,title,created_at) VALUES (?,?,?,?)",

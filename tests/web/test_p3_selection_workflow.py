@@ -12,7 +12,7 @@ from radio_news.web.server import create_editorial_feed_server
 
 def _seed(database: Path) -> None:
     store = SQLiteStore(database)
-    assert store.migrate() == (1, 2)
+    assert store.migrate() == (1, 2, 3)
     with store.connect() as connection:
         connection.executemany(
             "INSERT INTO stories(id,canonical_key,title,created_at) VALUES (?,?,?,?)",

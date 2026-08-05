@@ -63,8 +63,8 @@ def _horizon_authorized_targets() -> tuple[dict[str, dict[str, object]], list[st
 def _product_authorized_targets() -> list[str]:
     manifest = json.loads(PRODUCT_MANIFEST.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 1
-    assert manifest["active_stage"] == "PRODUCT_SLICE_P3"
-    assert manifest["authorization_document"] == "docs/product/p3-manual-editorial-selection.md"
+    assert manifest["active_stage"] == "PRODUCT_SLICE_P4"
+    assert manifest["authorization_document"] == "docs/product/p4-deterministic-draft-edition.md"
     stages = {entry["stage_id"]: entry for entry in manifest["stages"]}
 
     p1 = stages["PRODUCT_SLICE_P1"]
@@ -85,20 +85,31 @@ def _product_authorized_targets() -> list[str]:
     assert p3["authorized_stage"] == "PRODUCT_SLICE_P3"
     assert p3["implementation_authorized"] is True
     assert p3["authorization_merge_commit"] == "2cf3849c4b3f493c7b01a3ac27fcac89310c145c"
+    assert p3["implementation_merge_commit"] == "d3475ded0d1890aaa2af58b2bf9f1cbcfda6b668"
+    assert p3["gate_status"] == "PASS"
     assert set(p3["authorized_existing_components"]) <= IMPLEMENTED
-    assert "writes_confined_to_p3_selection_state" in p3["constraints"]
-    assert "evidence_domain_immutable" in p3["constraints"]
-    assert "additive_migration_only" in p3["constraints"]
 
-    for stage_id in ("PRODUCT_SLICE_P4", "PRODUCT_SLICE_P5"):
-        stage = stages[stage_id]
-        assert stage["authorized_stage"] == stage_id
-        assert stage["implementation_authorized"] is False
+    p4 = stages["PRODUCT_SLICE_P4"]
+    assert p4["authorized_stage"] == "PRODUCT_SLICE_P4"
+    assert p4["implementation_authorized"] is True
+    assert p4["authorization_merge_commit"] == "1eef0dd3cc5d86e99da4a0bdf665636a7f51bf76"
+    assert set(p4["authorized_existing_components"]) <= IMPLEMENTED
+    assert "deterministic_generation_only" in p4["constraints"]
+    assert "writes_confined_to_p4_draft_state" in p4["constraints"]
+    assert "p3_and_evidence_domain_immutable" in p4["constraints"]
+    assert "additive_migration_only" in p4["constraints"]
+    assert "no_ai_or_llm" in p4["constraints"]
+    assert "no_rundown" in p4["constraints"]
+
+    p5 = stages["PRODUCT_SLICE_P5"]
+    assert p5["authorized_stage"] == "PRODUCT_SLICE_P5"
+    assert p5["implementation_authorized"] is False
 
     return (
         list(p1["authorized_paths"])
         + list(p2["authorized_paths"])
         + list(p3["authorized_paths"])
+        + list(p4["authorized_paths"])
     )
 
 

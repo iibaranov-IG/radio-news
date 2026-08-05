@@ -2,9 +2,9 @@
   "schema_version": 1,
   "target_repository": "iibaranov-IG/radio-news",
   "product_roadmap": "docs/roadmap/product-first-roadmap.md",
-  "authorization_document": "docs/product/p3-manual-editorial-selection.md",
-  "generated_at": "2026-08-05T10:10:00Z",
-  "active_stage": "PRODUCT_SLICE_P3",
+  "authorization_document": "docs/product/p4-deterministic-draft-edition.md",
+  "generated_at": "2026-08-05T14:10:00Z",
+  "active_stage": "PRODUCT_SLICE_P4",
   "stages": [
     {
       "stage_id": "PRODUCT_SLICE_P1",
@@ -12,14 +12,7 @@
       "title": "Read-only Editorial Feed",
       "implementation_authorized": true,
       "prerequisite": "FIRST_INDEPENDENT_VERTICAL_SLICE_MERGED",
-      "authorized_paths": [
-        "src/radio_news/application/",
-        "src/radio_news/api/",
-        "src/radio_news/web/",
-        "tests/application/",
-        "tests/api/",
-        "tests/web/"
-      ],
+      "authorized_paths": ["src/radio_news/application/", "src/radio_news/api/", "src/radio_news/web/", "tests/application/", "tests/api/", "tests/web/"],
       "authorized_existing_components": ["PKG-01", "CLI-01", "CONFIG-01", "SQLITE-TARGET", "CI-01", "TEST-01"],
       "constraints": ["localhost_only", "read_only_sqlite", "no_network_ingress", "no_outbound_http", "no_horizon_runtime_dependency", "no_domain_or_schema_writes"],
       "required_product_gate": "editor sees persisted news in a browser without terminal JSON",
@@ -47,33 +40,24 @@
       "implementation_authorized": true,
       "prerequisite": "PRODUCT_SLICE_P2_FORMALLY_CLOSED",
       "authorization_merge_commit": "2cf3849c4b3f493c7b01a3ac27fcac89310c145c",
-      "authorized_paths": [
-        "src/radio_news/application/",
-        "src/radio_news/storage/migrations/",
-        "tests/application/",
-        "tests/storage/"
-      ],
+      "implementation_merge_commit": "d3475ded0d1890aaa2af58b2bf9f1cbcfda6b668",
+      "gate_status": "PASS",
+      "authorized_paths": ["src/radio_news/application/", "src/radio_news/storage/migrations/", "src/radio_news/web/", "tests/application/", "tests/storage/", "tests/web/"],
       "authorized_existing_components": ["PKG-01", "CONFIG-01", "SQLITE-TARGET", "CI-01", "TEST-01"],
-      "constraints": [
-        "localhost_only",
-        "no_outbound_http",
-        "no_horizon_runtime_dependency",
-        "manual_selection_only",
-        "writes_confined_to_p3_selection_state",
-        "evidence_domain_immutable",
-        "additive_migration_only",
-        "no_text_generation",
-        "no_ai_scoring",
-        "no_rundown"
-      ],
+      "constraints": ["localhost_only", "no_outbound_http", "no_horizon_runtime_dependency", "manual_selection_only", "writes_confined_to_p3_selection_state", "evidence_domain_immutable", "additive_migration_only", "no_text_generation", "no_ai_scoring", "no_rundown"],
       "required_product_gate": "editor manually saves and restores an ordered lead/body/reserve Story selection across application restart"
     },
     {
       "stage_id": "PRODUCT_SLICE_P4",
       "authorized_stage": "PRODUCT_SLICE_P4",
       "title": "Deterministic Draft Edition",
-      "implementation_authorized": false,
-      "blocked_until": "PRODUCT_SLICE_P3_GATE_PASS"
+      "implementation_authorized": true,
+      "prerequisite": "PRODUCT_SLICE_P3_FORMALLY_CLOSED",
+      "authorization_merge_commit": "1eef0dd3cc5d86e99da4a0bdf665636a7f51bf76",
+      "authorized_paths": ["src/radio_news/application/", "src/radio_news/storage/migrations/", "src/radio_news/web/", "tests/application/", "tests/storage/", "tests/web/"],
+      "authorized_existing_components": ["PKG-01", "CONFIG-01", "SQLITE-TARGET", "CI-01", "TEST-01"],
+      "constraints": ["localhost_only", "no_outbound_http", "no_horizon_runtime_dependency", "deterministic_generation_only", "writes_confined_to_p4_draft_state", "p3_and_evidence_domain_immutable", "additive_migration_only", "no_ai_or_llm", "no_rundown", "no_approval_publish_export_or_broadcast"],
+      "required_product_gate": "editor deterministically generates, edits, saves, restarts, and reopens an attributable Draft Edition from one saved P3 selection"
     },
     {
       "stage_id": "PRODUCT_SLICE_P5",
