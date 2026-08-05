@@ -2,9 +2,9 @@
   "schema_version": 1,
   "target_repository": "iibaranov-IG/radio-news",
   "product_roadmap": "docs/roadmap/product-first-roadmap.md",
-  "authorization_document": "docs/product/p2-story-and-evidence-view.md",
-  "generated_at": "2026-08-04T11:22:00Z",
-  "active_stage": "PRODUCT_SLICE_P2",
+  "authorization_document": "docs/product/p3-manual-editorial-selection.md",
+  "generated_at": "2026-08-05T10:10:00Z",
+  "active_stage": "PRODUCT_SLICE_P3",
   "stages": [
     {
       "stage_id": "PRODUCT_SLICE_P1",
@@ -20,22 +20,8 @@
         "tests/api/",
         "tests/web/"
       ],
-      "authorized_existing_components": [
-        "PKG-01",
-        "CLI-01",
-        "CONFIG-01",
-        "SQLITE-TARGET",
-        "CI-01",
-        "TEST-01"
-      ],
-      "constraints": [
-        "localhost_only",
-        "read_only_sqlite",
-        "no_network_ingress",
-        "no_outbound_http",
-        "no_horizon_runtime_dependency",
-        "no_domain_or_schema_writes"
-      ],
+      "authorized_existing_components": ["PKG-01", "CLI-01", "CONFIG-01", "SQLITE-TARGET", "CI-01", "TEST-01"],
+      "constraints": ["localhost_only", "read_only_sqlite", "no_network_ingress", "no_outbound_http", "no_horizon_runtime_dependency", "no_domain_or_schema_writes"],
       "required_product_gate": "editor sees persisted news in a browser without terminal JSON",
       "gate_status": "PASS",
       "merge_commit": "b2296481c24098931c27124aef97f649dc9188fe"
@@ -47,40 +33,40 @@
       "implementation_authorized": true,
       "prerequisite": "PRODUCT_SLICE_P1_FORMALLY_CLOSED",
       "authorization_merge_commit": "e9f1de908383399ec3b909e341616e09d5148f41",
-      "authorized_paths": [
-        "src/radio_news/application/",
-        "src/radio_news/web/",
-        "tests/application/",
-        "tests/web/"
-      ],
-      "authorized_existing_components": [
-        "PKG-01",
-        "CLI-01",
-        "CONFIG-01",
-        "SQLITE-TARGET",
-        "CI-01",
-        "TEST-01"
-      ],
-      "constraints": [
-        "localhost_only",
-        "read_only_sqlite",
-        "no_outbound_http",
-        "no_horizon_runtime_dependency",
-        "no_domain_writes",
-        "no_database_migrations",
-        "no_editorial_selection",
-        "no_text_generation",
-        "no_ai_scoring",
-        "no_rundown"
-      ],
+      "implementation_merge_commit": "3ed3aa6623d5dbe16458c8bc45f76def1a921910",
+      "gate_status": "PASS",
+      "authorized_paths": ["src/radio_news/application/", "src/radio_news/web/", "tests/application/", "tests/web/"],
+      "authorized_existing_components": ["PKG-01", "CLI-01", "CONFIG-01", "SQLITE-TARGET", "CI-01", "TEST-01"],
+      "constraints": ["localhost_only", "read_only_sqlite", "no_outbound_http", "no_horizon_runtime_dependency", "no_domain_writes", "no_database_migrations", "no_editorial_selection", "no_text_generation", "no_ai_scoring", "no_rundown"],
       "required_product_gate": "editor opens a feed card and understands the complete linked Story evidence graph without database changes"
     },
     {
       "stage_id": "PRODUCT_SLICE_P3",
       "authorized_stage": "PRODUCT_SLICE_P3",
       "title": "Manual Editorial Selection",
-      "implementation_authorized": false,
-      "blocked_until": "PRODUCT_SLICE_P2_GATE_PASS"
+      "implementation_authorized": true,
+      "prerequisite": "PRODUCT_SLICE_P2_FORMALLY_CLOSED",
+      "authorization_merge_commit": "2cf3849c4b3f493c7b01a3ac27fcac89310c145c",
+      "authorized_paths": [
+        "src/radio_news/application/",
+        "src/radio_news/storage/migrations/",
+        "tests/application/",
+        "tests/storage/"
+      ],
+      "authorized_existing_components": ["PKG-01", "CONFIG-01", "SQLITE-TARGET", "CI-01", "TEST-01"],
+      "constraints": [
+        "localhost_only",
+        "no_outbound_http",
+        "no_horizon_runtime_dependency",
+        "manual_selection_only",
+        "writes_confined_to_p3_selection_state",
+        "evidence_domain_immutable",
+        "additive_migration_only",
+        "no_text_generation",
+        "no_ai_scoring",
+        "no_rundown"
+      ],
+      "required_product_gate": "editor manually saves and restores an ordered lead/body/reserve Story selection across application restart"
     },
     {
       "stage_id": "PRODUCT_SLICE_P4",
