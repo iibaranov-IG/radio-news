@@ -4,6 +4,7 @@ from .editorial_selection import (
     EditorialSelection,
     EditorialSelectionItem,
     EditorialSelectionService,
+    SelectionStoryOption,
 )
 from .feed import EditorialFeedItem, EditorialFeedService, FeedSnapshot
 from .story_evidence import (
@@ -33,6 +34,7 @@ __all__ = [
     "NormalizedItemEvidenceRecord",
     "ProvenanceEdge",
     "RawItemEvidenceRecord",
+    "SelectionStoryOption",
     "SourceEvidenceRecord",
     "StoryEvidenceService",
     "StoryEvidenceSnapshot",
