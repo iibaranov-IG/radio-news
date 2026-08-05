@@ -1,5 +1,10 @@
-"""Read-only application services for KPNEWS product slices."""
+"""Application services for KPNEWS product slices."""
 
+from .editorial_selection import (
+    EditorialSelection,
+    EditorialSelectionItem,
+    EditorialSelectionService,
+)
 from .feed import EditorialFeedItem, EditorialFeedService, FeedSnapshot
 from .story_evidence import (
     ClaimEvidenceRecord,
@@ -19,6 +24,9 @@ __all__ = [
     "ClaimEvidenceRecord",
     "EditorialFeedItem",
     "EditorialFeedService",
+    "EditorialSelection",
+    "EditorialSelectionItem",
+    "EditorialSelectionService",
     "FactClaimEvidenceLink",
     "FactEvidenceRecord",
     "FeedSnapshot",
