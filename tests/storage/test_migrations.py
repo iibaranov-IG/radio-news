@@ -12,14 +12,21 @@ from radio_news.storage import Migration, SQLiteStore, load_packaged_migrations
 
 def test_migrate_empty_database(tmp_path: Path) -> None:
     store = SQLiteStore(tmp_path / "news.db")
-    assert store.migrate() == (1,)
+    assert store.migrate() == (1, 2)
     assert store.counts()["sources"] == 0
+    with store.connect() as conn:
+        assert conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='editorial_selections'"
+        ).fetchone() is not None
+        assert conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='editorial_selection_items'"
+        ).fetchone() is not None
 
 
 def test_migrate_is_idempotent(tmp_path: Path) -> None:
     store = SQLiteStore(tmp_path / "news.db")
-    assert store.migrate() == (1,)
-    assert store.migrate() == (1,)
+    assert store.migrate() == (1, 2)
+    assert store.migrate() == (1, 2)
 
 
 def test_migration_checksum_mismatch_fails(tmp_path: Path) -> None:
@@ -34,8 +41,8 @@ def test_migration_checksum_mismatch_fails(tmp_path: Path) -> None:
 def test_migration_rolls_back_on_error(tmp_path: Path) -> None:
     store = SQLiteStore(tmp_path / "news.db")
     bad = Migration.from_sql(
-        2,
-        "0002_bad.sql",
+        99,
+        "0099_bad.sql",
         "CREATE TABLE transient_table(id INTEGER);\nTHIS IS NOT SQL;",
     )
     with pytest.raises(MigrationError):
@@ -45,7 +52,7 @@ def test_migration_rolls_back_on_error(tmp_path: Path) -> None:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='transient_table'"
         ).fetchone()
         applied = conn.execute(
-            "SELECT 1 FROM schema_migrations WHERE version=2"
+            "SELECT 1 FROM schema_migrations WHERE version=99"
         ).fetchone()
     assert exists is None
     assert applied is None
@@ -65,6 +72,10 @@ def test_foreign_keys_are_enabled(tmp_path: Path) -> None:
 
 
 def test_migrations_available_from_installed_package() -> None:
-    resource = files("radio_news.storage.migrations").joinpath("0001_initial.sql")
-    assert resource.is_file()
-    assert "CREATE TABLE sources" in resource.read_text(encoding="utf-8")
+    package = files("radio_news.storage.migrations")
+    initial = package.joinpath("0001_initial.sql")
+    selection = package.joinpath("0002_editorial_selections.sql")
+    assert initial.is_file()
+    assert selection.is_file()
+    assert "CREATE TABLE sources" in initial.read_text(encoding="utf-8")
+    assert "CREATE TABLE editorial_selections" in selection.read_text(encoding="utf-8")
