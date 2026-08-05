@@ -39,12 +39,14 @@ def _render_feed(snapshot: FeedSnapshot) -> str:
     cards = []
     for item in snapshot.items:
         title = html.escape(item.title)
+        story_markup = "Story: недоступен"
         if item.story_id:
             title = f'<a href="/stories/{quote(item.story_id, safe="")}">{title}</a>'
+            story_markup = f"Story: {html.escape(item.story_id)}"
             add_button = f'<button type="button" data-add-story="{html.escape(item.story_id, quote=True)}">В подборку</button>'
         else:
             add_button = ""
-        cards.append(f'<article class="card"><div class="meta"><strong>{html.escape(item.source_name)}</strong><span>{html.escape(item.published_at)}</span></div><h2>{title}</h2><div class="meta"><code>{html.escape(item.source_id)}</code><span class="state">{html.escape(item.processing_state)}</span></div><div class="toolbar" style="margin-top:12px">{add_button}</div></article>')
+        cards.append(f'<article class="card"><div class="meta"><strong>{html.escape(item.source_name)}</strong><span>{html.escape(item.published_at)}</span></div><h2>{title}</h2><div class="meta"><span><code>{html.escape(item.source_id)}</code> · <code>{story_markup}</code></span><span class="state">{html.escape(item.processing_state)}</span></div><div class="toolbar" style="margin-top:12px">{add_button}</div></article>')
     content = f'<section class="feed">{"".join(cards)}</section>' if cards else '<section class="panel"><h2>Лента пока пуста</h2></section>'
     body = f'''<header><h1>КПNEWS</h1><p>Редакционная лента</p><p><a href="/selections/{_SELECTION_ID}">Открыть ручную подборку →</a></p></header><main><p>Новостей: {len(snapshot.items)}</p>{content}</main>
 <script>for(const b of document.querySelectorAll('[data-add-story]'))b.onclick=async()=>{{const r=await fetch('/api/selections/{_SELECTION_ID}'),d=await r.json();if(!r.ok){{alert(d.error);return}};if(!d.selection.items.some(x=>x.story_id===b.dataset.addStory))d.selection.items.push({{story_id:b.dataset.addStory,role:'body',position:d.selection.items.length}});const s=await fetch('/api/selections/{_SELECTION_ID}',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{title:d.selection.title,items:d.selection.items}})}}),j=await s.json();if(!s.ok){{alert(j.error);return}};location.href='/selections/{_SELECTION_ID}'}};</script>'''
@@ -65,6 +67,7 @@ def _render_story_evidence(snapshot: StoryEvidenceSnapshot) -> str:
     sections += [_record("VerificationResult", x.id, x.status + " · " + x.reason) for x in snapshot.verification_results]
     provenance = "".join(f'<li><code>{html.escape(x.source_type)}:{html.escape(x.source_id)}</code> <strong>{html.escape(x.relation)}</strong> <code>{html.escape(x.target_type)}:{html.escape(x.target_id)}</code></li>' for x in snapshot.provenance)
     sections.append(f'<section class="panel"><h2>Provenance</h2><ol>{provenance}</ol></section>')
+    sections.append('<p class="muted">SQLite открыта read-only · доказательный граф не изменяется.</p>')
     story_id = json.dumps(snapshot.story.id)
     body = f'''<header><a href="/">← Лента</a><h1>{html.escape(snapshot.story.title)}</h1><p>Story and Evidence View</p></header><main>{''.join(sections)}</main><script>document.getElementById('add-story').onclick=async()=>{{const r=await fetch('/api/selections/{_SELECTION_ID}'),d=await r.json();if(!r.ok){{alert(d.error);return}};if(!d.selection.items.some(x=>x.story_id==={story_id}))d.selection.items.push({{story_id:{story_id},role:'body',position:d.selection.items.length}});const s=await fetch('/api/selections/{_SELECTION_ID}',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{title:d.selection.title,items:d.selection.items}})}}),j=await s.json();if(!s.ok){{alert(j.error);return}};location.href='/selections/{_SELECTION_ID}'}};</script>'''
     return _page("КПNEWS — доказательная цепочка", body, wide=True)
@@ -98,8 +101,8 @@ def _handler(feed_service: EditorialFeedService, evidence_service: StoryEvidence
             selection=selection_service.load_or_empty(_SELECTION_ID);stories=selection_service.list_story_options();return {"selection":selection.to_dict(),"stories":[x.to_dict() for x in stories]}
         def do_GET(self) -> None:  # noqa: N802
             path=urlsplit(self.path).path
+            if path=="/healthz":self._json(HTTPStatus.OK,{"status":"ok"});return
             try:
-                if path=="/healthz":self._json(HTTPStatus.OK,{"status":"ok"});return
                 if path=="/":self._send(HTTPStatus.OK,"text/html; charset=utf-8",_render_feed(feed_service.snapshot()).encode());return
                 if path=="/api/feed":self._json(HTTPStatus.OK,feed_service.snapshot().to_dict());return
                 if path==f"/selections/{_SELECTION_ID}":
@@ -108,8 +111,13 @@ def _handler(feed_service: EditorialFeedService, evidence_service: StoryEvidence
                 if path.startswith("/stories/"):self._send(HTTPStatus.OK,"text/html; charset=utf-8",_render_story_evidence(evidence_service.snapshot(unquote(path[len('/stories/'):]))).encode());return
                 if path.startswith("/api/stories/"):self._json(HTTPStatus.OK,evidence_service.snapshot(unquote(path[len('/api/stories/'):])).to_dict());return
                 self._send(HTTPStatus.NOT_FOUND,"text/plain; charset=utf-8",b"not found")
-            except StoryNotFound as exc:self._send(HTTPStatus.NOT_FOUND,"text/html; charset=utf-8",_error_page("Сюжет не найден",str(exc)).encode())
-            except RadioNewsError as exc:self._send(HTTPStatus.SERVICE_UNAVAILABLE,"text/html; charset=utf-8",_error_page("Ошибка",str(exc)).encode())
+            except StoryNotFound as exc:
+                if path.startswith("/api/"):self._json(HTTPStatus.NOT_FOUND,{"error":str(exc)})
+                else:self._send(HTTPStatus.NOT_FOUND,"text/html; charset=utf-8",_error_page("Сюжет не найден",str(exc)).encode())
+            except RadioNewsError as exc:
+                if path=="/api/feed" or path.startswith("/api/"):self._json(HTTPStatus.SERVICE_UNAVAILABLE,{"error":str(exc)})
+                elif path=="/":self._send(HTTPStatus.SERVICE_UNAVAILABLE,"text/html; charset=utf-8",_error_page("Не удалось открыть ленту",str(exc)).encode())
+                else:self._send(HTTPStatus.SERVICE_UNAVAILABLE,"text/html; charset=utf-8",_error_page("Ошибка",str(exc)).encode())
         def do_POST(self) -> None:  # noqa: N802
             if urlsplit(self.path).path!=f"/api/selections/{_SELECTION_ID}":self._send(HTTPStatus.NOT_FOUND,"text/plain; charset=utf-8",b"not found");return
             try:
