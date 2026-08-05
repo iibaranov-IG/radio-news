@@ -39,6 +39,10 @@ class DraftEdition:
     updated_at: str
     items: tuple[DraftEditionItem, ...]
 
+    @property
+    def estimated_seconds(self) -> int:
+        return sum(item.estimated_seconds for item in self.items)
+
     def to_dict(self) -> dict[str, object]:
         return {
             "id": self.id,
@@ -48,6 +52,7 @@ class DraftEdition:
             "generator_version": self.generator_version,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "estimated_seconds": self.estimated_seconds,
             "items": [item.to_dict() for item in self.items],
         }
 
@@ -70,7 +75,7 @@ class DraftEditionService:
         return connection
 
     @staticmethod
-    def _edition_id(selection_id: str, generator_version: str) -> str:
+    def edition_id(selection_id: str, generator_version: str = GENERATOR_VERSION) -> str:
         digest = hashlib.sha256(
             f"{selection_id}\0{generator_version}".encode("utf-8")
         ).hexdigest()
@@ -101,7 +106,11 @@ class DraftEditionService:
             """,
             (story_id,),
         ).fetchall()
-        baseline = " ".join(row["canonical_text"].strip() for row in facts if row["canonical_text"].strip())
+        baseline = " ".join(
+            row["canonical_text"].strip()
+            for row in facts
+            if row["canonical_text"].strip()
+        )
         if not baseline:
             baseline = _BLOCKED_BASELINE
 
@@ -116,7 +125,11 @@ class DraftEditionService:
             """,
             (story_id,),
         ).fetchall()
-        attribution = "; ".join(row["display_name"].strip() for row in sources if row["display_name"].strip())
+        attribution = "; ".join(
+            row["display_name"].strip()
+            for row in sources
+            if row["display_name"].strip()
+        )
         if not attribution:
             attribution = _BLOCKED_ATTRIBUTION
         return baseline, attribution
@@ -135,7 +148,7 @@ class DraftEditionService:
         if now.tzinfo is None:
             raise RadioNewsError("now must be timezone-aware")
         timestamp = now.astimezone(UTC).isoformat()
-        edition_id = self._edition_id(selection_id, generator_version)
+        edition_id = self.edition_id(selection_id, generator_version)
 
         with closing(self._connect()) as connection:
             try:
@@ -162,7 +175,9 @@ class DraftEditionService:
                 for expected_position, row in enumerate(selected):
                     if row["position"] != expected_position:
                         raise RadioNewsError("selection positions are not contiguous")
-                    baseline, attribution = self._story_material(connection, row["story_id"])
+                    baseline, attribution = self._story_material(
+                        connection, row["story_id"]
+                    )
                     generated.append(
                         DraftEditionItem(
                             story_id=row["story_id"],
@@ -250,7 +265,9 @@ class DraftEditionService:
                     raise RadioNewsError(f"Draft Edition not found: {edition_id}")
                 expected = {row["story_id"] for row in rows}
                 if set(edited_text_by_story) != expected:
-                    raise RadioNewsError("edited text must cover exactly the Draft Edition Stories")
+                    raise RadioNewsError(
+                        "edited text must cover exactly the Draft Edition Stories"
+                    )
                 for story_id in expected:
                     edited = edited_text_by_story[story_id].strip()
                     if not edited:
@@ -269,6 +286,13 @@ class DraftEditionService:
                     connection.execute("ROLLBACK")
                 raise
         return self.load(edition_id)
+
+    def load_for_selection(
+        self,
+        selection_id: str,
+        generator_version: str = GENERATOR_VERSION,
+    ) -> DraftEdition:
+        return self.load(self.edition_id(selection_id, generator_version))
 
     def load(self, edition_id: str) -> DraftEdition:
         with closing(self._connect()) as connection:
